@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+.pytest_cache/
+# raw venue data stays local (terms: see README)
+data/
+logs/
