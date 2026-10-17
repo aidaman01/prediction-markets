@@ -1,10 +1,12 @@
 """Download resolved Polymarket markets and their price histories into data/polymarket/ (local only, not committed).
 
   python scripts/fetch_history.py markets     # closed markets with volume >= $1,000 -> markets.jsonl
-  python scripts/fetch_history.py prices      # 3-hour price history of the first outcome -> history.jsonl (resumable)
+  python scripts/fetch_history.py prices      # 3-hour price history of the first outcome -> history.jsonl
+                                              # (resumable; random order, so a partial download is a random sample)
 """
 import json
 import os
+import random
 import sys
 import time
 
@@ -16,15 +18,23 @@ MARKETS, HISTORY = os.path.join(OUT, "markets.jsonl"), os.path.join(OUT, "histor
 
 
 def fetch_markets():
+    """Resumable: the cursor of the next page is saved after every page."""
     os.makedirs(OUT, exist_ok=True)
-    c, n, t0 = Client(min_interval=0.2), 0, time.time()
-    with open(MARKETS + ".part", "w") as f:
-        for m in c.markets(closed="true", volume_num_min=1000, include_tag="true"):
-            f.write(json.dumps(parse_market(m)) + "\n")
-            n += 1
-            if n % 5000 == 0:
+    part, cfile = MARKETS + ".part", MARKETS + ".cursor"
+    cursor = open(cfile).read().strip() if os.path.exists(cfile) and os.path.exists(part) else None
+    n = sum(1 for _ in open(part)) if cursor else 0
+    c, t0 = Client(min_interval=0.2, retries=10), time.time()
+    with open(part, "a" if cursor else "w") as f:
+        for page, cursor in c.market_pages(cursor, closed="true", volume_num_min=1000, include_tag="true"):
+            f.writelines(json.dumps(parse_market(m)) + "\n" for m in page)
+            f.flush()
+            with open(cfile, "w") as cf:
+                cf.write(cursor or "")
+            n += len(page)
+            if n % 5000 < len(page):
                 print(f"{n} markets, {time.time() - t0:.0f}s", flush=True)
-    os.replace(MARKETS + ".part", MARKETS)
+    os.replace(part, MARKETS)
+    os.remove(cfile)
     print(f"done: {n} markets", flush=True)
 
 
@@ -35,9 +45,10 @@ def wanted(r):
 
 
 def fetch_prices():
-    rows = [r for r in map(json.loads, open(MARKETS)) if wanted(r)]
+    rows = list({r["id"]: r for r in map(json.loads, open(MARKETS)) if wanted(r)}.values())   # dedupe resumed pages
     done = {json.loads(l)["id"] for l in open(HISTORY)} if os.path.exists(HISTORY) else set()
     todo = [r for r in rows if r["id"] not in done]
+    random.Random(0).shuffle(todo)          # random order: whatever has been fetched so far is a random sample
     print(f"{len(rows)} eligible, {len(done)} done, {len(todo)} to fetch", flush=True)
     c, t0 = Client(min_interval=0.15), time.time()
     with open(HISTORY, "a") as f:

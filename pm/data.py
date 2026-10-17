@@ -100,15 +100,17 @@ class Client:
             time.sleep(min(60, 2 ** k))
         raise RuntimeError(f"{method} {url} failed after {self.retries} tries")
 
-    def markets(self, **params):
-        """Iterate Gamma markets (keyset pagination)."""
+    def market_pages(self, cursor=None, **params):
+        """Iterate Gamma market pages (keyset pagination) as (markets, next_cursor); next_cursor None at the end."""
         params = {"limit": 100, **params}
         while True:
+            if cursor:
+                params["after_cursor"] = cursor
             d = self.call("GET", f"{GAMMA}/markets/keyset", params=params)
-            yield from d.get("markets") or []
-            if not d.get("next_cursor"):
+            cursor = d.get("next_cursor")
+            yield d.get("markets") or [], cursor
+            if not cursor:
                 return
-            params["after_cursor"] = d["next_cursor"]
 
     def price_history(self, token_id, bucket=10800):
         """Full price history at 3-hour buckets (permanent per docs). Returns (timestamps, prices) arrays."""
