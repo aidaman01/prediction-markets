@@ -77,6 +77,47 @@ Is the same event priced differently on Kalshi and Polymarket, after fees?
 - Arbitrage detector on synthetic order books with hand-computed edges, including walking the book and fees.
 - The bias test rejects about 5% of the time on simulated unbiased markets with the same event clustering.
 
+## Data and venue terms
+
+| | Polymarket | Kalshi |
+|---|---|---|
+| Resolved markets with outcomes | Gamma `GET /markets/keyset?closed=true` | `GET /markets`, `GET /historical/markets` |
+| Price history | data-api `GET /v2/prices-history`: 3-hour and 12-hour buckets kept permanently, finer ones 30 days; only order-book (CLOB) markets, so the 2020-22 AMM markets have no history | candlesticks 1 min / 1 h / 1 day; settled markets before the archive cutoff via `/historical/...` |
+| Live order books | CLOB `GET /book`, `POST /books` (500 tokens per call) | `GET /markets/{ticker}/orderbook` (bids only) |
+| Published rate limits | per IP: Gamma `/markets` 300 per 10 s, `/v2/prices-history` 200 per 10 s, `/books` 500 per 10 s | token buckets per account tier (Basic: 200 tokens/s, 10 per request) |
+| Fees | `C * rate * p(1-p)`, taker only, rate per market (0 to 0.07) | `0.07 * C * P(1-P)` rounded up to the cent for most markets |
+| Terms | [Terms of Use](https://polymarket.com/tos) (effective 2026-08-11) forbid scraping the site and access or redistribution of the Data by capital-market firms and market-data distributors. Reading the documented public API for personal research is not in a prohibited category. | [Developer Agreement v1.1](https://assets.kalshi.com/Kalshi-Developer-Agreement.pdf), accepted by any API use: "Use of Kalshi APIs is expressly limited to facilitating a members own trading"; collecting, caching, aggregating or storing API data for other purposes is prohibited. The [Data Terms of Use](https://kalshi-public-docs.s3.amazonaws.com/kalshi-data-terms-of-service.pdf) also forbid compiling databases from Kalshi Data. |
+
+Consequences: raw data is never committed. The repository holds code and aggregate results only, and
+`data/` is git-ignored. **Kalshi is not queried** until written permission from Kalshi is obtained, so
+question (d) and the Kalshi half of (c) are on hold. Kalshi parsing and fees are implemented and tested on
+the published examples, so they are ready if permission arrives.
+
+## Order-book collector (questions c and c')
+
+`python -m pm.collect` takes a snapshot every 2 minutes of every open order-book market in every
+Polymarket event with at least $10,000 traded in the last 24 hours (about 16,600 markets in 480 events on
+2026-10-17), keeping 5 price levels a side. The universe is refreshed hourly. The published `/books` limit
+would allow a snapshot every few seconds. Disk is the binding constraint (about 1.1 MB per compressed
+snapshot, about 0.9 GB a day). Only the first outcome's book is stored: Polymarket derives the second
+outcome's book from it. In a check of 347 markets with both books fetched in the same request, 346 were
+exact mirrors (bid `p` = ask `1 - p`, same size). `scripts/install_collector.sh` installs it as a launchd
+agent that starts at login and restarts if it dies. It only runs while the Mac is awake.
+
+## How to run
+
+```
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python tests/test_pm.py                       # 11 known-answer tests
+.venv/bin/python scripts/fetch_history.py markets       # resolved markets, volume >= $1,000
+.venv/bin/python scripts/fetch_history.py prices        # 3-hour price histories (resumable)
+.venv/bin/python scripts/run_calibration.py             # (a) and (b) -> results/
+.venv/bin/python scripts/plot_calibration.py            # -> calibration.png
+./scripts/install_collector.sh                          # (c) collector as a background agent
+```
+
 ## Deviations
 
-None yet.
+Implementation details fixed after the questions were committed but before any result was computed:
+prices of exactly 0 or 1 are clipped to [0.001, 0.999] (the smallest Polymarket tick) before taking logits;
+a category is reported only if it has at least 30 events; Kalshi is excluded for the terms reason above.
