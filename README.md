@@ -1,6 +1,7 @@
 # Where are prediction markets least efficient?
 
-A read-only measurement study of Kalshi and Polymarket. If a contract trades at 70 cents, the market says
+A read-only measurement study of Polymarket (Kalshi was planned and dropped: its API terms forbid this use,
+see below). If a contract trades at 70 cents, the market says
 "70% likely". This project tests whether those prices can be trusted, and where they break down.
 
 Scope: measurement only. Public read-only data, no accounts, no API keys, no orders. Whatever comes out is
@@ -63,6 +64,10 @@ are excluded, since they are not exhaustive.
 
 Is the same event priced differently on Kalshi and Polymarket, after fees?
 
+**Status: closed, not possible under the venue terms.** Kalshi's API Developer Agreement allows API use only
+for a member's own trading and forbids collecting or storing its data for any other purpose (see "Data and
+venue terms"). Without Kalshi data there is no second venue to compare. The plan below is kept as written.
+
 - Only event pairs whose resolution rules are verified to match: same event, same resolution source, same
   cut-off date and time zone, same treatment of edge cases. The evidence for each pair (both rule texts and
   the comparison) is stored in `pairs/`; pairs with different rules are dropped and listed with the reason.
@@ -123,9 +128,9 @@ event resolves on 2027-01-01, so the edge is about 5% a year on locked capital, 
 | Terms | [Terms of Use](https://polymarket.com/tos) (effective 2026-08-11) forbid scraping the site and access or redistribution of the Data by capital-market firms and market-data distributors. Reading the documented public API for personal research is not in a prohibited category. | [Developer Agreement v1.1](https://assets.kalshi.com/Kalshi-Developer-Agreement.pdf), accepted by any API use: "Use of Kalshi APIs is expressly limited to facilitating a members own trading"; collecting, caching, aggregating or storing API data for other purposes is prohibited. The [Data Terms of Use](https://kalshi-public-docs.s3.amazonaws.com/kalshi-data-terms-of-service.pdf) also forbid compiling databases from Kalshi Data. |
 
 Consequences: raw data is never committed. The repository holds code and aggregate results only, and
-`data/` is git-ignored. **Kalshi is not queried** until written permission from Kalshi is obtained, so
-question (d) and the Kalshi half of (c) are on hold. Kalshi parsing and fees are implemented and tested on
-the published examples, so they are ready if permission arrives.
+`data/` is git-ignored. **Kalshi is not used at all**: the study never sent a request to its API. Question
+(d) is closed and (c) covers Polymarket only. The Kalshi fee and order-book functions in `pm/` stay, since they
+are tested against Kalshi's published fee examples, but no script calls them.
 
 ## Order-book collector (questions c and c')
 
@@ -154,4 +159,4 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 Implementation details fixed after the questions were committed but before any result was computed:
 prices of exactly 0 or 1 are clipped to [0.001, 0.999] (the smallest Polymarket tick) before taking logits;
-a category is reported only if it has at least 30 events; Kalshi is excluded for the terms reason above.
+a category is reported only if it has at least 30 events; Kalshi is dropped and question (d) closed for the terms reason above.
