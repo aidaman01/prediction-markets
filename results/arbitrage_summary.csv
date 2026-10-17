@@ -1,4 +1,4 @@
-kind,checks,positive,episodes,median_profit_usd
-c,58442,0,0,
-c'-no,270,0,0,
-c'-yes,680,5,1,0.16046
+kind,checks,gaps_after_fees,beat_tbill,arbitrage,arbitrage_episodes,median_profit_at_100,median_profit_at_1000,median_profit_at_10000
+c,995552,0,0,0,0,,,
+c'-no,4101,2,2,0,0,,,
+c'-yes,10649,64,1,0,0,,,

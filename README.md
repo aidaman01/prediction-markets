@@ -88,8 +88,55 @@ venue terms"). Without Kalshi data there is no second venue to compare. The plan
 
 ## Results
 
-Final numbers for (a) and (b) come from a random sample stratified by month over the whole history (see
-"Changes to plan"); they will replace this section when that run is done.
+### (a) and (b): calibration and the favorite-longshot bias (2026-10-17)
+
+![calibration](calibration.png)
+
+Sample: 30,666 markets drawn at random, up to 1,000 per month of resolution, from the 1,070,804 resolved
+Polymarket markets with volume >= $1,000 (February 2023 to October 2026); 30,402 have a price history.
+Primary rule: price 7 days before the scheduled end, market still open, volume >= $1,000. Months are weighted
+roughly equally (early months have fewer than 1,000 eligible markets and are taken whole).
+
+| 7 days before scheduled end | n (events) | Brier | reliability | slope `b` (SE) | p(`b` = 1) | intercept `a` (SE) | longshots <= 10c: overpricing (SE), n |
+|---|---|---|---|---|---|---|---|
+| all | 11,029 (8,301) | 0.1317 | 0.0009 | 1.071 (0.028) | 0.010 | -0.119 (0.027) | 0.77c (0.21), 3,883 |
+| all without recurring | 10,669 (8,053) | 0.1324 | 0.0009 | 1.068 (0.028) | 0.015 | -0.117 (0.027) | 0.74c (0.21), 3,708 |
+| sports | 6,391 (5,286) | 0.1756 | 0.0011 | 0.988 (0.040) | 0.77 | -0.121 (0.031) | 0.18c (0.45), 1,142 |
+| politics | 2,020 (1,277) | 0.0603 | 0.0009 | 1.178 (0.064) | 0.006 | -0.012 (0.089) | 0.59c (0.35), 1,253 |
+| other | 1,064 (712) | 0.0774 | 0.0035 | 1.142 (0.075) | 0.059 | -0.056 (0.111) | 1.59c (0.43), 609 |
+| economics | 664 (452) | 0.0870 | 0.0025 | 1.080 (0.099) | 0.42 | -0.252 (0.134) | 1.14c (0.58), 336 |
+| crypto | 439 (275) | 0.0459 | 0.0090 | 1.169 (0.147) | 0.25 | -0.754 (0.221) | 1.60c (0.52), 322 |
+| recurring | 360 (266) | 0.1092 | 0.0044 | 1.142 (0.172) | 0.41 | -0.189 (0.204) | 1.26c (0.79), 175 |
+| weather | 91 (55) | 0.0928 | 0.0068 | 0.905 (0.288) | 0.74 | -0.063 (0.352) | -1.25c (2.88), 46 |
+| all, volume >= $50,000 | 4,682 (3,610) | 0.1221 | 0.0004 | 0.996 (0.037) | 0.92 | -0.006 (0.043) | 0.03c (0.31), 1,900 |
+
+- (a) Prices are well calibrated in size: reliability, the miscalibration part of the Brier score, is
+  0.0009 of 0.1317. Calibration is still statistically rejected (joint test p < 0.0001), mostly through the
+  intercept: the first-listed outcome resolves YES a little less often than priced. In the 0.4-0.5 bin the
+  price averages 0.457 and the outcome 0.384 (n = 1,453). Exploratory, found after looking: in sports this
+  comes from props, spreads and totals (spreads 0.473 vs 0.271, n = 85), not from head-to-head games
+  (0.450 vs 0.471, n = 488). In markets with volume >= $50,000 the intercept is -0.006 (SE 0.043): gone.
+- (b) There is a small favorite-longshot bias: `b` = 1.07, p = 0.010, and contracts at or below 10 cents
+  resolve YES 0.77 cents less often than their price says. It is strongest in politics (`b` = 1.18). In
+  markets with volume >= $50,000 it disappears (`b` = 0.996, p = 0.92; 0.03 cents). Recurring markets
+  barely matter at 7 days (360 of 11,029); removing them changes nothing.
+- Horizons: at 1 day `b` = 1.019 (p = 0.30, n = 21,394); at 30 days `b` = 1.094 (p = 0.036, n = 3,352).
+- Many tests (8 categories x 3 horizons x 2 samples x 3 rules): a single p near 0.05 is weak evidence.
+  Full tables: `results/calibration_summary.csv`, `results/calibration_bins_7d.csv`.
+
+Look-ahead check (`results/lookahead.csv`): share of measured prices already at >= 0.97 or <= 0.03, 7 days
+out. Pre-registered close rule: 33.0% (n = 10,561). Settle rule: 10.9% (n = 8,978). Scheduled rule: 27.4%
+(n = 11,029). The scheduled rule still sees many extreme prices: longshots in multi-outcome events, and
+outcomes already known while the market is still open. Neither is look-ahead, because the time is fixed in
+advance. The settle rule removes extreme prices only by choosing the time with hindsight, which biases it
+(see "Changes to plan").
+
+### (c) and (c'): arbitrage inside Polymarket (collection started 2026-10-17)
+
+First 81 snapshots (about 2.7 hours): 995,552 single-market checks with no YES + NO gap after fees, as
+mirrored books imply. Exhaustive multi-outcome events: 66 gap-snapshots after fees in 14,750 checks,
+3 of them above the T-bill hurdle, none still there in the next snapshot. So far: no arbitrage. The
+collector keeps running; this section will be updated after 2-3 weeks.
 
 ### Superseded: first preliminary results (2026-10-17)
 

@@ -11,7 +11,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INK, MUTED, GRID, BLUE = "#0b0b0b", "#52514e", "#d9d8d4", "#2a78d6"
 
 b = pd.read_csv(os.path.join(ROOT, "results", "calibration_bins_7d.csv"))
-cats = ["all"] + [c for c in ("politics", "sports", "crypto", "economics", "weather", "other") if b[b.category == c].n.sum() >= 30]
+cats = ["all"] + [c for c in ("politics", "sports", "crypto", "economics", "weather", "recurring", "other") if b[b.category == c].n.sum() >= 30]
 fig, axes = plt.subplots(2, 4, figsize=(13, 6.6), sharex=True, sharey=True)
 for ax in axes.flat[len(cats):]:
     ax.axis("off")
@@ -31,10 +31,10 @@ for ax, cat in zip(axes.flat, cats):
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 for ax in axes[1]:
-    ax.set_xlabel("price 7 days before close", color=MUTED, fontsize=9)
+    ax.set_xlabel("price 7 days before scheduled end", color=MUTED, fontsize=9)
 for ax in axes[:, 0]:
     ax.set_ylabel("share that resolved YES", color=MUTED, fontsize=9)
-fig.suptitle("Polymarket calibration: price vs. outcome (10 price bins, 95% Wilson intervals; dashed = perfect)",
+fig.suptitle("Polymarket calibration, 7 days before the scheduled end (stratified sample; 10 price bins, 95% Wilson intervals)",
              x=0.01, ha="left", fontsize=12, color=INK)
 fig.tight_layout()
 fig.savefig(os.path.join(ROOT, "calibration.png"), dpi=150, facecolor="white")

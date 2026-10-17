@@ -1,0 +1,10 @@
+method,horizon,n,share_extreme,extreme_matching_outcome
+close,1d,27573,0.286621,7862
+close,30d,3681,0.372181,1360
+close,7d,10561,0.329514,3458
+resolution,1d,25197,0.0669127,1643
+resolution,30d,2651,0.138061,356
+resolution,7d,8978,0.108599,953
+scheduled,1d,21394,0.283537,6033
+scheduled,30d,3352,0.366647,1218
+scheduled,7d,11029,0.274096,3010
