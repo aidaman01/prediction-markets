@@ -20,25 +20,51 @@ MARKETS, HISTORY = os.path.join(OUT, "markets.jsonl"), os.path.join(OUT, "histor
 SAMPLE = os.path.join(OUT, "sample_ids.txt")
 
 
-def fetch_markets():
-    """Resumable: the cursor of the next page is saved after every page."""
-    os.makedirs(OUT, exist_ok=True)
-    part, cfile = MARKETS + ".part", MARKETS + ".cursor"
+# Disjoint scheduled-end windows, fetched in parallel (the API is latency-bound at ~1 page/s per connection).
+WINDOWS = ["2000-01-01", "2024-01-01", "2024-07-01", "2025-01-01"] + [
+    f"{y}-{m:02d}-01" for y, m in [(2025, m) for m in range(7, 13)] + [(2026, m) for m in range(1, 13)]] + ["2100-01-01"]
+
+
+def fetch_window(lo, hi):
+    """One window, resumable: the cursor of the next page is saved after every page."""
+    part = os.path.join(OUT, f"markets-{lo}.jsonl.part")
+    cfile, done = part.replace(".part", ".cursor"), part.replace(".part", "")
+    if os.path.exists(done):
+        return sum(1 for _ in open(done))
     cursor = open(cfile).read().strip() if os.path.exists(cfile) and os.path.exists(part) else None
     n = sum(1 for _ in open(part)) if cursor else 0
-    c, t0 = Client(min_interval=0.2, retries=10), time.time()
+    c = Client(min_interval=0.2, retries=10)
     with open(part, "a" if cursor else "w") as f:
-        for page, cursor in c.market_pages(cursor, closed="true", volume_num_min=1000, include_tag="true"):
+        for page, cursor in c.market_pages(cursor, closed="true", volume_num_min=1000, include_tag="true",
+                                           end_date_min=f"{lo}T00:00:00Z", end_date_max=f"{hi}T00:00:00Z"):
             f.writelines(json.dumps(parse_market(m)) + "\n" for m in page)
             f.flush()
             with open(cfile, "w") as cf:
                 cf.write(cursor or "")
             n += len(page)
-            if n % 5000 < len(page):
-                print(f"{n} markets, {time.time() - t0:.0f}s", flush=True)
-    os.replace(part, MARKETS)
+            if n % 20000 < len(page):
+                print(f"{lo}: {n} markets", flush=True)
+    os.replace(part, done)
     os.remove(cfile)
-    print(f"done: {n} markets", flush=True)
+    print(f"{lo}: done, {n} markets", flush=True)
+    return n
+
+
+def fetch_markets():
+    """All closed markets with volume >= $1,000, 12 windows at a time (~16 req/s; Gamma /markets limit 30 req/s)."""
+    os.makedirs(OUT, exist_ok=True)
+    with ThreadPoolExecutor(12) as ex:
+        counts = list(ex.map(lambda w: fetch_window(*w), zip(WINDOWS, WINDOWS[1:])))
+    seen = set()
+    with open(MARKETS + ".tmp", "w") as f:                  # windows share boundaries: dedupe by id
+        for lo in WINDOWS[:-1]:
+            for line in open(os.path.join(OUT, f"markets-{lo}.jsonl")):
+                i = json.loads(line)["id"]
+                if i not in seen:
+                    seen.add(i)
+                    f.write(line)
+    os.replace(MARKETS + ".tmp", MARKETS)
+    print(f"done: {len(seen)} markets ({sum(counts)} rows over windows)", flush=True)
 
 
 def wanted(r):
@@ -72,7 +98,7 @@ def fetch_prices(markets=MARKETS, limit=None, ids=None):
     random.Random(0).shuffle(todo)          # random order: whatever has been fetched so far is a random sample
     todo = todo[:int(limit)] if limit else todo
     print(f"{len(rows)} eligible, {len(done)} done, {len(todo)} to fetch", flush=True)
-    workers = 8                             # each worker <= 1.25 req/s -> <= 10 req/s total; published limit 20 req/s
+    workers = 12                            # each worker <= 1.25 req/s -> <= 15 req/s total; published limit 20 req/s
     clients, t0 = [Client(min_interval=0.8) for _ in range(workers)], time.time()
 
     def get(k_r):
