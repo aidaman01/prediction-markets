@@ -19,14 +19,17 @@ import sys
 import time
 from logging.handlers import RotatingFileHandler
 
+from pm.config import CFG
 from pm.data import GAMMA, Client
+
+C = CFG["collector"]
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SNAP, LOGS = os.path.join(ROOT, "data", "snapshots"), os.path.join(ROOT, "logs")
 log = logging.getLogger("collector")
 
 
-def universe(c, min_vol24h=10000):
+def universe(c, min_vol24h=C["min_event_volume_24h"]):
     out, params = [], {"limit": 100, "closed": "false", "order": "volume24hr", "ascending": "false"}
     while True:
         d = c.call("GET", f"{GAMMA}/events/keyset", params=params)
@@ -54,7 +57,7 @@ def compact(book, depth):
             [[l["price"], l["size"]] for l in asks]]
 
 
-def snapshot(c, tokens, depth=5, batch=500):
+def snapshot(c, tokens, depth=C["depth"], batch=500):
     books = {}
     for i in range(0, len(tokens), batch):
         for b in c.books(tokens[i:i + batch]):
@@ -103,9 +106,9 @@ def check_mirror(n=500):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--interval", type=int, default=120)
-    ap.add_argument("--refresh", type=int, default=3600)
-    ap.add_argument("--depth", type=int, default=5)
+    ap.add_argument("--interval", type=int, default=C["interval_seconds"])
+    ap.add_argument("--refresh", type=int, default=C["refresh_seconds"])
+    ap.add_argument("--depth", type=int, default=C["depth"])
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--check-mirror", action="store_true")
     a = ap.parse_args()

@@ -1,0 +1,45 @@
+# Every sampling and analysis parameter of the study. Scripts read this file; nothing is set elsewhere.
+
+[inventory]
+min_volume = 1000            # resolved markets with lifetime volume >= this (USD) are listed
+
+[sample]
+per_month = 1000             # up to this many eligible markets drawn per calendar month of resolution
+seed = 0
+first_month = "2023-02"      # first month with order-book price history
+last_month = "2026-09"       # analysis uses complete calendar months only (data downloaded 2026-10-17)
+
+[measure]
+horizons_days = [1, 7, 30]
+primary_horizon = "7d"
+bucket_seconds = 10800       # price history resolution (3 hours; kept permanently by Polymarket)
+max_gap_hours = 24           # a recorded price must exist within this window before the measuring time
+max_age_hours = 24           # robustness: the price must have changed within this window
+extreme_hi = 0.97            # look-ahead check thresholds
+extreme_lo = 0.03
+
+[analysis]
+main_volume = 1000
+robust_volume = 50000
+min_events = 30              # report a category only with at least this many events
+longshot_cut = 0.10
+volume_buckets = [1000, 5000, 20000, 50000]
+recurring_min_count = 100    # question template shared by >= this many markets -> "recurring"
+bins = [10, 20]              # equal-width bin counts for the binning sensitivity; plus 10 equal-count bins
+
+[rule]                       # hypothetical longshot-selling rule
+thresholds_cents = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+min_bets = 100
+cost_multipliers = [1, 2]
+spread_snapshots_until = 2026-10-17T16:00:00Z   # spreads from snapshots taken before this time (UTC)
+
+[simulation]                 # look-ahead check on simulated efficient markets
+markets = 20000
+seed = 0
+horizon_days = 7
+
+[collector]
+interval_seconds = 120
+min_event_volume_24h = 10000
+depth = 5
+refresh_seconds = 3600

@@ -1,0 +1,4 @@
+binning,reliability,resolution,uncertainty
+10 equal-width,0.000823202,0.0787644,0.206867
+20 equal-width,0.0011065,0.0792794,0.206867
+10 equal-count,0.000850111,0.077815,0.206867

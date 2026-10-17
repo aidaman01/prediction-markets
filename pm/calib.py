@@ -20,8 +20,12 @@ def wilson(k, n, z=1.959964):
     return c - h, c + h
 
 
-def _bins(p, bins):
-    return np.minimum((np.asarray(p, float) * bins).astype(int), bins - 1)
+def _bins(p, bins, equal_count=False):
+    """Bin index per forecast: equal-width bins on [0, 1], or equal-count bins (by rank; ties split by order)."""
+    p = np.asarray(p, float)
+    if equal_count:
+        return (np.argsort(np.argsort(p, kind="stable"), kind="stable") * bins // len(p)).astype(int)
+    return np.minimum((p * bins).astype(int), bins - 1)
 
 
 def calibration_table(p, y, bins=10):
@@ -37,10 +41,11 @@ def calibration_table(p, y, bins=10):
     return rows
 
 
-def murphy(p, y, bins=10):
-    """Brier = reliability - resolution + uncertainty (exact when the price is constant within each bin)."""
+def murphy(p, y, bins=10, equal_count=False):
+    """Brier = reliability - resolution + uncertainty (exact when the price is constant within each bin).
+    Uncertainty is also the Brier score of the climatology forecast (always predict the base rate)."""
     p, y = np.asarray(p, float), np.asarray(y, float)
-    k, n, ob = _bins(p, bins), len(p), y.mean()
+    k, n, ob = _bins(p, bins, equal_count), len(p), y.mean()
     rel = res = 0.0
     for b in np.unique(k):
         m = k == b
@@ -114,3 +119,13 @@ def max_drawdown(pnl):
     cum = np.cumsum(pnl)
     peak = np.maximum.accumulate(np.concatenate([[0.0], cum]))[1:]
     return float((peak - cum).max()) if len(cum) else 0.0
+
+
+def holm(pvals):
+    """Holm step-down adjusted p-values (family-wise error control), in the input order."""
+    p = np.asarray(pvals, float)
+    order = np.argsort(p)
+    adj = np.minimum(1.0, np.maximum.accumulate(p[order] * (len(p) - np.arange(len(p)))))
+    out = np.empty_like(adj)
+    out[order] = adj
+    return out

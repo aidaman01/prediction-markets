@@ -1,7 +1,7 @@
 """Download resolved Polymarket markets and their price histories into data/polymarket/ (local only, not committed).
 
   python scripts/fetch_history.py markets     # closed markets with volume >= $1,000 -> markets.jsonl
-  python scripts/fetch_history.py sample [K]   # stratified sample: up to K (default 1000) markets per month -> sample_ids.txt
+  python scripts/fetch_history.py sample      # stratified sample (config.toml) -> results/sample_ids.txt
   python scripts/fetch_history.py prices [markets.jsonl] [N]  # 3-hour price history of the first outcome -> history.jsonl
                                               # (resumable; random order, so a partial download is a random sample)
 """
@@ -13,11 +13,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pm.config import CFG
 from pm.data import DAY, Client, parse_market
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "polymarket")
 MARKETS, HISTORY = os.path.join(OUT, "markets.jsonl"), os.path.join(OUT, "history.jsonl")
-SAMPLE = os.path.join(OUT, "sample_ids.txt")
+SAMPLE = os.path.join(os.path.dirname(OUT), "..", "results", "sample_ids.txt")   # committed manifest (IDs only)
 
 
 # Disjoint scheduled-end windows, fetched in parallel (the API is latency-bound at ~1 page/s per connection).
@@ -35,8 +36,8 @@ def fetch_window(lo, hi):
     n = sum(1 for _ in open(part)) if cursor else 0
     c = Client(min_interval=0.2, retries=10)
     with open(part, "a" if cursor else "w") as f:
-        for page, cursor in c.market_pages(cursor, closed="true", volume_num_min=1000, include_tag="true",
-                                           end_date_min=f"{lo}T00:00:00Z", end_date_max=f"{hi}T00:00:00Z"):
+        for page, cursor in c.market_pages(cursor, closed="true", volume_num_min=CFG["inventory"]["min_volume"],
+                                           include_tag="true", end_date_min=f"{lo}T00:00:00Z", end_date_max=f"{hi}T00:00:00Z"):
             f.writelines(json.dumps(parse_market(m)) + "\n" for m in page)
             f.flush()
             with open(cfile, "w") as cf:
@@ -73,7 +74,7 @@ def wanted(r):
             and r["start"] and r["T"] - r["start"] >= DAY)
 
 
-def stratified_sample(k=1000, seed=0):
+def stratified_sample(k=CFG["sample"]["per_month"], seed=CFG["sample"]["seed"]):
     """Up to k eligible markets drawn at random from every calendar month (UTC) of resolution T."""
     by_month = {}
     for r in {r["id"]: r for r in map(json.loads, open(MARKETS)) if wanted(r)}.values():

@@ -1,40 +1,41 @@
 # Where are prediction markets least efficient?
 
-Polymarket prices are well calibrated. In a random sample of 11,029 resolved markets (February 2023 to
-October 2026, stratified by month), priced 7 days before their scheduled end, the miscalibration part of the
-Brier score is 0.0009 out of 0.1317. There is a small favorite-longshot bias (recalibration slope 1.07,
-p = 0.010; contracts at or below 10 cents resolve YES 0.77 cents less often than priced), and it disappears in
-markets with at least $50,000 of volume. The bias is smaller than the cost of trading it: a hypothetical rule
-that sells longshots, tuned on the older half of the sample and tested once on the newer half, makes +0.18 cents
-per contract (t = 1.3) at estimated costs and loses money at twice those costs. Read-only public data; no
-accounts, no orders.
+Polymarket prices have a small average calibration error, but statistically detectable departures from
+perfect calibration. In a random sample of 10,540 resolved markets (February 2023 to September 2026, up to
+1,000 per month), priced 7 days before their scheduled end, the reliability (miscalibration) part of the Brier
+score is 0.0008 out of 0.1286; always forecasting the base rate would score 0.2069. Perfect calibration is
+still rejected, mainly through a shift (the first-listed outcome wins less often than priced) and a small
+favorite-longshot bias: recalibration slope 1.077 (p = 0.0066); contracts at or below 10 cents resolve YES 0.77
+cents less often than priced. In markets with at least $50,000 of volume, both disappear. The bias is smaller
+than the cost of trading it: a hypothetical rule that sells longshots, tuned on the older half of the sample and
+tested once on the newer half, makes +0.17 cents per contract (t = 1.26) at estimated costs and loses money at
+twice those costs. Read-only public data; no accounts, no orders.
 
 **Status:** Part 1 (calibration, longshot bias): final. Part 2 (arbitrage, order books): collecting until ~Nov 7.
 
 ![calibration](calibration.png)
 
-Sample: 30,666 markets drawn at random, up to 1,000 per month of resolution, from the 1,070,804 resolved
-Polymarket markets with volume >= $1,000 (February 2023 to October 2026); 30,402 have a price history.
-Primary rule: price 7 days before the scheduled end, market still open, volume >= $1,000. Months are weighted
-roughly equally (early months have fewer than 1,000 eligible markets and are taken whole).
+Primary result in bold; every other row is exploratory (Holm-adjusted p-values within that family) or a
+robustness check. Standard errors are clustered by event.
 
-| 7 days before scheduled end | n (events) | Brier | reliability | slope `b` (SE) | p(`b` = 1) | intercept `a` (SE) | longshots <= 10c: overpricing (SE), n |
-|---|---|---|---|---|---|---|---|
-| all | 11,029 (8,301) | 0.1317 | 0.0009 | 1.071 (0.028) | 0.010 | -0.119 (0.027) | 0.77c (0.21), 3,883 |
-| all without recurring | 10,669 (8,053) | 0.1324 | 0.0009 | 1.068 (0.028) | 0.015 | -0.117 (0.027) | 0.74c (0.21), 3,708 |
-| sports | 6,391 (5,286) | 0.1756 | 0.0011 | 0.988 (0.040) | 0.77 | -0.121 (0.031) | 0.18c (0.45), 1,142 |
-| politics | 2,020 (1,277) | 0.0603 | 0.0009 | 1.178 (0.064) | 0.006 | -0.012 (0.089) | 0.59c (0.35), 1,253 |
-| other | 1,064 (712) | 0.0774 | 0.0035 | 1.142 (0.075) | 0.059 | -0.056 (0.111) | 1.59c (0.43), 609 |
-| economics | 664 (452) | 0.0870 | 0.0025 | 1.080 (0.099) | 0.42 | -0.252 (0.134) | 1.14c (0.58), 336 |
-| crypto | 439 (275) | 0.0459 | 0.0090 | 1.169 (0.147) | 0.25 | -0.754 (0.221) | 1.60c (0.52), 322 |
-| recurring | 360 (266) | 0.1092 | 0.0044 | 1.142 (0.172) | 0.41 | -0.189 (0.204) | 1.26c (0.79), 175 |
-| weather | 91 (55) | 0.0928 | 0.0068 | 0.905 (0.288) | 0.74 | -0.063 (0.352) | -1.25c (2.88), 46 |
-| all, volume >= $50,000 | 4,682 (3,610) | 0.1221 | 0.0004 | 0.996 (0.037) | 0.92 | -0.006 (0.043) | 0.03c (0.31), 1,900 |
+| 7 days before scheduled end | n (events) | Brier | climatology Brier | reliability | slope `b` (SE) | p(`b` = 1), Holm | intercept `a` (SE) | longshots <= 10c: overpricing (SE), n |
+|---|---|---|---|---|---|---|---|---|
+| **all (primary)** | **10,540 (7,861)** | **0.1286** | **0.2069** | **0.0008** | **1.077 (0.028)** | **0.0066** | **-0.119 (0.028)** | **0.77c (0.21), 3,816** |
+| sports | 5,964 (4,901) | 0.1725 | 0.2317 | 0.0010 | 1.002 (0.043) | 0.96, 1.00 | -0.120 (0.032) | 0.21c (0.45), 1,112 |
+| politics | 1,991 (1,250) | 0.0606 | 0.1578 | 0.0009 | 1.174 (0.064) | 0.007, 0.15 | -0.019 (0.090) | 0.57c (0.36), 1,233 |
+| other | 1,058 (706) | 0.0777 | 0.1733 | 0.0035 | 1.138 (0.075) | 0.065, 1.00 | -0.052 (0.111) | 1.59c (0.44), 606 |
+| economics | 661 (449) | 0.0874 | 0.1779 | 0.0025 | 1.078 (0.099) | 0.43, 1.00 | -0.251 (0.134) | 1.11c (0.58), 333 |
+| crypto | 435 (271) | 0.0463 | 0.0740 | 0.0091 | 1.167 (0.147) | 0.26, 1.00 | -0.754 (0.221) | 1.60c (0.53), 318 |
+| recurring | 341 (250) | 0.1085 | 0.1525 | 0.0053 | 1.123 (0.173) | 0.48, 1.00 | -0.194 (0.212) | 1.26c (0.82), 169 |
+| weather | 90 (54) | 0.0937 | 0.2054 | 0.0069 | 0.898 (0.285) | 0.72, 1.00 | -0.057 (0.349) | -1.46c (2.93), 45 |
+| robustness: without recurring | 10,199 (7,627) | 0.1292 | 0.2083 | 0.0008 | 1.075 (0.029) | 0.0088 | -0.117 (0.028) | 0.74c (0.21), 3,647 |
+| robustness: volume >= $50,000 | 4,611 (3,542) | 0.1209 | 0.2101 | 0.0004 | 0.995 (0.037) | 0.90 | -0.011 (0.044) | 0.01c (0.31), 1,891 |
+| robustness: fresh prices only | 8,874 (6,823) | 0.1314 | 0.2116 | 0.0007 | 1.068 (0.030) | 0.024 | -0.119 (0.030) | 0.81c (0.24), 3,067 |
+| robustness: fresh, >= $50,000 | 4,049 (3,213) | 0.1258 | 0.2153 | 0.0005 | 0.983 (0.038) | 0.65 | -0.019 (0.046) | -0.08c (0.37), 1,564 |
 
-Standard errors are clustered by event: outcomes of one event, such as the candidates in an election, are
-not independent. `a` and `b` come from `logit P(YES) = a + b * logit(price)`; a calibrated market has `a = 0`,
-`b = 1`, and `b > 1` means longshots are overpriced. Longshot overpricing is `mean(price - outcome)` over
-contracts at or below 10 cents.
+`logit P(YES) = a + b * logit(price)`: a calibrated market has `a = 0, b = 1`; `b > 1` means longshots are
+overpriced. Climatology Brier: the score of always forecasting the sample's base rate (equal to the
+uncertainty term). "Fresh": the price changed within the 24 hours before the measuring time.
 
 ## About
 
@@ -128,55 +129,76 @@ venue terms"). Without Kalshi data there is no second venue to compare. The plan
 
 ## Results
 
-### (a) and (b): calibration and the favorite-longshot bias (2026-10-17)
+### (a) and (b): calibration and the favorite-longshot bias (final, 2026-10-17)
 
-Table and chart: top of this page.
+Table and calibration chart: top of this page. Sample: the 30,666 markets in `results/sample_ids.txt`, drawn
+at random, up to 1,000 per month of resolution, from the 1,070,804 resolved Polymarket markets with volume >=
+$1,000. Analysed: the complete calendar months February 2023 to September 2026, 26,841 markets with a price
+history (October 2026 dropped as incomplete). Primary rule: price 7 days before the scheduled end, market still
+open, volume >= $1,000. Months are weighted roughly equally; early months have fewer than 1,000 eligible
+markets and are taken whole.
 
-- (a) Prices are well calibrated in size: reliability, the miscalibration part of the Brier score, is
-  0.0009 of 0.1317. Calibration is still statistically rejected (joint test p < 0.0001), mostly through the
-  intercept: the first-listed outcome resolves YES a little less often than priced. In the 0.4-0.5 bin the
-  price averages 0.457 and the outcome 0.384 (n = 1,453). Exploratory, found after looking: in sports this
-  comes from props, spreads and totals (spreads 0.473 vs 0.271, n = 85), not from head-to-head games
-  (0.450 vs 0.471, n = 488). In markets with volume >= $50,000 the intercept is -0.006 (SE 0.043): gone.
-- (b) There is a small favorite-longshot bias: `b` = 1.07, p = 0.010, and contracts at or below 10 cents
-  resolve YES 0.77 cents less often than their price says. It is strongest in politics (`b` = 1.18). In
-  markets with volume >= $50,000 it disappears (`b` = 0.996, p = 0.92; 0.03 cents). Recurring markets
-  barely matter at 7 days (360 of 11,029); removing them changes nothing.
-- Horizons: at 1 day `b` = 1.019 (p = 0.30, n = 21,394); at 30 days `b` = 1.094 (p = 0.036, n = 3,352).
-- Many tests (8 categories x 3 horizons x 2 samples x 3 rules): a single p near 0.05 is weak evidence.
-  Full tables: `results/calibration_summary.csv`, `results/calibration_bins_7d.csv`.
+- (a) Brier 0.1286 = reliability 0.0008 - resolution 0.0788 + uncertainty 0.2069; skill against the
+  climatology forecast 0.379. Binning barely matters: reliability is 0.0008 with 10 equal-width bins, 0.0011
+  with 20, and 0.0009 with 10 equal-count bins (`results/binning_sensitivity.csv`). Perfect calibration is
+  rejected (joint test p < 0.0001), mainly through the intercept: in the 0.4-0.5 bin the price averages 0.456
+  and the outcome 0.388 (n = 1,345). With volume >= $50,000 the intercept is -0.011 (SE 0.044).
+- (b) Small favorite-longshot bias: `b` = 1.077 (SE 0.028, p = 0.0066); longshot overpricing 0.77 cents
+  (SE 0.21). It sits in thin markets:
+
+![longshot overpricing by volume](longshot_by_volume.png)
+
+  Overpricing is about 2.1 cents per contract in markets with $1,000-$20,000 of volume and indistinguishable
+  from zero above $20,000 (`results/longshot_by_volume.csv`).
+- Exploratory (category and horizon): after Holm adjustment no category's or horizon's slope differs from 1
+  (smallest: politics at 7 days, p = 0.007, Holm 0.15). Joint tests that survive Holm: sports and crypto at 7
+  days, all markets and politics at 1 day, all markets and crypto at 30 days. At 1
+  day `b` = 1.029 (p = 0.13); at 30 days `b` = 1.097 (p = 0.033, Holm 0.69).
+- Staleness: the median measured price last changed 3 hours before the measuring time; 15.8% had not changed
+  for more than 24 hours. Without them the longshot bias remains (0.81 cents, SE 0.24; `b` = 1.068, p = 0.024)
+  and the >= $50,000 result remains (`b` = 0.983, p = 0.65; -0.08 cents).
+- Recurring machine-generated markets barely matter at 7 days (341 of 10,540); removing them changes nothing.
+  Full tables: `results/calibration_summary.csv` (with Holm-adjusted p-values), `results/calibration_bins_7d.csv`.
 
 ### Is the longshot bias exploitable? A hypothetical rule (2026-10-17)
 
 Hypothetical only: no orders were placed. Rule: 7 days before the scheduled end, sell every contract quoted at
 or below X (each market's cheaper side), as a taker. Costs per contract: half-spread plus taker fee.
 
-- Spreads: historical spreads are not in the data. Today's books from the collector stand in for them: mean
-  half-spread 0.24 cents for contracts at or below 2 cents (8,310 books), 1.03 cents at 2-5 cents (4,813),
-  2.49 cents at 5-10 cents (6,955). These are active markets (events with >= $10,000 traded in a day), so
-  spreads in the historical sample were probably wider. 57% of order books near the extremes were one-sided,
-  so often there was nothing to sell into. Fees: today's taker rate for the category (0.04 to 0.07), applied
-  to every market even though most historical markets charged no fee.
-- X chosen on the older half (scheduled end up to 2025-04-24, 5,515 markets) by mean net P&L per bet: X = 3
-  cents, +0.05 cents per bet (t = 0.29, 2,003 bets). Every X from 1 to 10 cents was within about one standard
+- Spreads: historical spreads are not in the data. Order books collected on 2026-10-17 before 16:00 UTC stand
+  in for them: mean half-spread 0.24 cents for contracts at or below 2 cents (9,931 books), 1.02 cents at 2-5
+  cents (5,644), 2.49 cents at 5-10 cents (8,286). These are active markets (events with >= $10,000 traded in a
+  day), so spreads in the historical sample were probably wider. 58% of order books near the extremes were
+  one-sided, so often there was nothing to sell into. Fees: today's taker rate for the category (0.04 to
+  0.07), applied to every market even though most historical markets charged no fee.
+- X chosen on the older half (scheduled end up to 2025-04-07, 5,275 markets) by mean net P&L per bet: X = 3
+  cents, +0.05 cents per bet (t = 0.27, 1,941 bets). Every X from 1 to 10 cents was within about one standard
   error of zero.
-- Tested once on the newer half (5,514 markets), X = 3 cents:
+- Tested once on the newer half (5,265 markets), X = 3 cents:
 
 | costs | bets (events) | mean price | win rate | net P&L per bet (SE) | total, 1 contract per bet | max drawdown |
 |---|---|---|---|---|---|---|
-| base | 1,015 (824) | 0.74c | 0.20% | +0.18c (0.14), t = 1.29 | +$1.82 | $0.99 |
-| 2x | 1,015 (824) | 0.74c | 0.20% | -0.18c (0.14), t = -1.31 | -$1.84 | $2.03 |
+| base | 1,046 (832) | 0.72c | 0.19% | +0.17c (0.14), t = 1.26 | +$1.78 | $1.00 |
+| 2x | 1,046 (832) | 0.72c | 0.19% | -0.19c (0.13), t = -1.38 | -$1.95 | $2.03 |
 
-The edge is not distinguishable from zero and changes sign when costs double. With real spreads probably
-wider, and one-sided books, the measured bias is not a trading opportunity. `scripts/longshot_rule.py`,
-`results/longshot_rule.csv`.
+![hypothetical longshot rule](longshot_rule_oos.png)
+
+The edge is not distinguishable from zero and changes sign when costs double. Two single winning longshots
+cause the two steps. With real spreads probably wider, and one-sided books, the measured bias is not a trading
+opportunity. `scripts/longshot_rule.py`, `results/longshot_rule.csv`, `results/longshot_rule_test_pnl.csv`.
 
 Look-ahead check (`results/lookahead.csv`): share of measured prices already at >= 0.97 or <= 0.03, 7 days
-out. Pre-registered close rule: 33.0% (n = 10,561). Settle rule: 10.9% (n = 8,978). Scheduled rule: 27.4%
-(n = 11,029). The scheduled rule still sees many extreme prices: longshots in multi-outcome events, and
+out. Pre-registered close rule: 34.1% (n = 10,102). Settle rule: 11.3% (n = 8,531). Scheduled rule: 28.4%
+(n = 10,540). The scheduled rule still sees many extreme prices: longshots in multi-outcome events, and
 outcomes already known while the market is still open. Neither is look-ahead, because the time is fixed in
-advance. The settle rule removes extreme prices only by choosing the time with hindsight, which biases it
-(see "Changes to plan").
+advance. The other two rules choose the time with hindsight, and on simulated efficient markets they produce a
+bias that is not there:
+
+![look-ahead trap](lookahead_trap.png)
+
+20,000 simulated "will it happen by day 60" markets, calibrated by construction (`pm/sim.py`,
+`results/lookahead_simulation.csv`): slope `b` = 2.34 (SE 0.04) measuring 7 days before the actual close,
+2.51 (SE 0.04) before prices settle, 0.945 (SE 0.048) before the scheduled end.
 
 ### (c) and (c'): arbitrage inside Polymarket (collection started 2026-10-17)
 
@@ -226,18 +248,22 @@ minute). It runs under `caffeinate -s`, which keeps the Mac awake while it is on
 
 ## How to run
 
+All parameters are in `config.toml`; exact package versions in `requirements.lock`; tests run on every push
+(GitHub Actions). The sampled market IDs are in `results/sample_ids.txt` (IDs only).
+
 ```
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python tests/test_pm.py                       # 19 known-answer tests
-.venv/bin/python scripts/fetch_history.py markets       # resolved markets, volume >= $1,000 (resumable)
-.venv/bin/python scripts/fetch_history.py sample        # up to 1,000 markets per month -> sample_ids.txt
-.venv/bin/python scripts/fetch_history.py sample_prices # their 3-hour price histories (resumable)
-.venv/bin/python scripts/run_calibration.py data/polymarket/sample_ids.txt   # (a) and (b) -> results/
-.venv/bin/python scripts/plot_calibration.py            # -> calibration.png
-.venv/bin/python scripts/longshot_rule.py               # hypothetical longshot-selling rule -> results/
-./scripts/install_collector.sh                          # (c) collector as a background agent
-.venv/bin/python scripts/scan_arb.py                    # (c) and (c') -> results/arbitrage_summary.csv
+python3 -m venv .venv && .venv/bin/pip install -r requirements.lock
+.venv/bin/python tests/test_pm.py                         # 20 known-answer tests
+.venv/bin/python scripts/fetch_history.py markets         # resolved markets (resumable, ~15 min)
+.venv/bin/python scripts/fetch_history.py sample_prices   # price histories of results/sample_ids.txt (~35 min)
+./scripts/reproduce.sh                                    # every table in results/ and every figure
+./scripts/install_collector.sh                            # (c) collector as a background agent
+.venv/bin/python scripts/scan_arb.py                      # (c) and (c') -> results/arbitrage_summary.csv
 ```
+
+`scripts/fetch_history.py sample` redraws the stratified sample from a fresh market list; because markets keep
+being added, a new draw differs from the committed manifest, so use the manifest to reproduce these numbers.
+The longshot rule's spread estimate uses the collector's snapshots (not in the repository).
 
 ## Changes to plan
 
@@ -274,6 +300,12 @@ reported next to the new ones.
    $10,000.
 5. **Exploitability of the longshot bias.** The hypothetical selling rule was added after the results, at the
    author's request. Its threshold is chosen on the older half only and the newer half is evaluated once.
+6. **External review, 2026-10-17.** Headline reworded ("small average calibration error, but statistically
+   detectable departures from perfect calibration"). Added: climatology baseline and the full Brier
+   decomposition; binning sensitivity (10 and 20 equal-width, 10 equal-count bins); Holm-adjusted p-values for
+   the exploratory category and horizon results, with the primary hypothesis kept separate; complete calendar
+   months only (October 2026 dropped); a fresh-prices robustness check (price changed within 24 hours); a
+   config file, lockfile, manifest of sampled IDs and CI.
 
 ## License
 

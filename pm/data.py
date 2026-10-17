@@ -110,6 +110,18 @@ def resolution_time(ts, px, close, hi=0.97, lo=0.03):
     return min(end, ts[k])
 
 
+def price_age(ts, px, t):
+    """Seconds since the price last changed, as seen at time t: t minus the first time of the current run of
+    equal prices (the first recorded point if it never changed). None if nothing is recorded by t."""
+    i = int(np.searchsorted(ts, t, side="right")) - 1
+    if i < 0:
+        return None
+    j = i
+    while j > 0 and px[j - 1] == px[i]:
+        j -= 1
+    return float(t - ts[j])
+
+
 def price_at(ts, px, t, max_stale=DAY):
     """Last price at or before t, if recorded within max_stale seconds; else None. ts ascending."""
     i = int(np.searchsorted(ts, t, side="right")) - 1

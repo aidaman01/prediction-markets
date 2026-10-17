@@ -8,10 +8,11 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pm.arb import (annualized, at_budget, basket_profit, best_basket, book_problems, episodes, kalshi_asks, kalshi_leg,
                     pm_leg, reachable, tbill_yield)
-from pm.calib import (brier, calibration_table, longshot, longshot_side, max_drawdown, murphy, recalibration,
+from pm.calib import (brier, calibration_table, holm, longshot, longshot_side, max_drawdown, murphy, recalibration,
                       sell_pnl, wilson)
-from pm.data import DAY, measure_time, parse_market, price_at, recurring_templates, resolution_time, template
+from pm.data import DAY, measure_time, parse_market, price_age, price_at, recurring_templates, resolution_time, template
 from pm.fees import kalshi_buy_cash, kalshi_fill_rounding, kalshi_trade_fee, polymarket_fee
+from pm.sim import lookahead_slopes, simulate
 
 PRICES = ["0.01"] + [f"{x / 100:.2f}" for x in range(5, 100, 5)] + ["0.99"]
 
@@ -84,26 +85,6 @@ def test_brier_and_wilson_known_values():
     assert np.isclose(lo, 0.2366, atol=1e-4) and np.isclose(hi, 0.7634, atol=1e-4)
 
 
-def simulate(n_events, rng, slope=1.0):
-    """Events of 1-8 exclusive outcomes. Prices on [0.01, 0.99]; truth = logistic(slope * logit(price))."""
-    p, y, ev = [], [], []
-    for e in range(n_events):
-        k = rng.integers(1, 9)
-        if k == 1:
-            pr = rng.uniform(0.01, 0.99, 1)
-        else:
-            pr = 0.01 + (1 - 0.01 * k) * rng.dirichlet(np.ones(k))
-        lg = np.log(pr / (1 - pr))
-        q = 1 / (1 + np.exp(-slope * lg))
-        if k == 1:
-            out = (rng.random(1) < q).astype(float)
-        else:
-            out = np.zeros(k)
-            out[rng.choice(k, p=q / q.sum())] = 1           # exactly one winner per event
-        p += list(pr); y += list(out); ev += [e] * k
-    return np.array(p), np.array(y), np.array(ev)
-
-
 def test_calibrated_forecasts_pass():
     rng = np.random.default_rng(1)
     p, y, ev = simulate(6000, rng)
@@ -173,35 +154,10 @@ def test_early_resolution_does_not_leak_the_outcome():
     assert resolution_time(ts, np.where(ts < 30 * DAY, 0.6, 0.01), closed) == 30 * DAY
 
 
-def simulate_by_date(n, rng, E=60 * DAY, lag=2 * DAY):
-    """Efficient 'will it happen by day 60' markets: hazard lam, price = P(event before E | none yet), calibrated at
-    every fixed time. The event sends the price to 0.999 and the market closes `lag` later; with no event it
-    decays to 0.001 and closes at E."""
-    grid = np.arange(0, E + lag + 1, 10800.0)
-    for _ in range(n):
-        p0 = rng.uniform(0.05, 0.95)
-        lam = -np.log(1 - p0) / E
-        tau = rng.exponential(1 / lam)
-        y = tau < E
-        closed = tau + lag if y else E
-        ts = grid[grid <= closed]
-        px = np.clip(np.where(ts < min(tau, E), 1 - np.exp(-lam * np.clip(E - ts, 0, None)), float(y)), 0.001, 0.999)
-        yield ts, px, E, closed, float(y)
-
-
 def test_only_scheduled_anchor_keeps_an_efficient_market_calibrated():
     """Measuring 7 days before the actual close, or before prices settle, picks the moment with hindsight and
     makes an efficient market look miscalibrated; 7 days before the scheduled end (if still open) does not."""
-    rng, h = np.random.default_rng(5), 7 * DAY
-    obs = {"close": ([], []), "resolution": ([], []), "scheduled": ([], [])}
-    for ts, px, end, closed, y in simulate_by_date(6000, rng):
-        T = min(end, closed)
-        for k, t in (("close", T - h), ("resolution", resolution_time(ts, px, T) - h), ("scheduled", measure_time(end, closed, h))):
-            p = price_at(ts, px, t) if t is not None and t >= 0 else None
-            if p is not None:
-                obs[k][0].append(p)
-                obs[k][1].append(y)
-    fit = {k: recalibration(np.array(p), np.array(y), np.arange(len(p))) for k, (p, y) in obs.items()}
+    fit = lookahead_slopes(6000, seed=5)
     assert fit["scheduled"]["p_joint"] > 0.01 and abs(fit["scheduled"]["b"] - 1) < 3 * fit["scheduled"]["se_b"]
     assert fit["close"]["p_joint"] < 1e-6 and fit["resolution"]["p_joint"] < 1e-6
 
@@ -258,6 +214,24 @@ def test_selling_longshots_pnl_and_drawdown():
     q = rng.uniform(0.01, 0.10, 200000)
     won = rng.random(200000) < q
     assert abs(sell_pnl(q, won, 0.01, 0.0).mean() + 0.01) < 0.002
+
+
+def test_holm_equal_count_bins_and_price_age():
+    # Holm: sorted 0.005, 0.01, 0.03, 0.04 times 4, 3, 2, 1 = 0.02, 0.03, 0.06, 0.04 -> running max 0.06
+    assert np.allclose(holm([0.01, 0.04, 0.03, 0.005]), [0.03, 0.06, 0.06, 0.02])
+    assert np.allclose(holm([0.5, 0.9]), [1.0, 1.0])                  # 1.0, then max(1.0, 0.9)
+    # equal-count bins: 20 forecasts into 4 bins of 5, by rank
+    p = np.linspace(0.9, 0.05, 20)
+    from pm.calib import _bins
+    k = _bins(p, 4, equal_count=True)
+    assert np.bincount(k).tolist() == [5, 5, 5, 5] and k[-1] == 0 and k[0] == 3
+    # climatology: uncertainty equals the Brier score of always forecasting the base rate
+    y = np.array([1, 0, 0, 1, 0, 0, 0, 1.0])
+    assert np.isclose(murphy(np.full(8, 0.375), y)["uncertainty"], brier(np.full(8, y.mean()), y))
+    # price age: price 0.30 from t=0, 0.40 from t=6h (twice), queried at t=20h -> changed 14 h ago
+    ts, px = np.array([0, 10800, 21600, 32400.0]), np.array([0.3, 0.3, 0.4, 0.4])
+    assert price_age(ts, px, 72000) == 72000 - 21600 and price_age(ts, px, 15000) == 15000
+    assert price_age(ts, px, -1) is None
 
 
 if __name__ == "__main__":
