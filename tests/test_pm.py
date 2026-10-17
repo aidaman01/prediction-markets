@@ -8,7 +8,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pm.arb import (annualized, at_budget, basket_profit, best_basket, book_problems, episodes, kalshi_asks, kalshi_leg,
                     pm_leg, reachable, tbill_yield)
-from pm.calib import brier, calibration_table, longshot, murphy, recalibration, wilson
+from pm.calib import (brier, calibration_table, longshot, longshot_side, max_drawdown, murphy, recalibration,
+                      sell_pnl, wilson)
 from pm.data import DAY, measure_time, parse_market, price_at, recurring_templates, resolution_time, template
 from pm.fees import kalshi_buy_cash, kalshi_fill_rounding, kalshi_trade_fee, polymarket_fee
 
@@ -242,6 +243,21 @@ def test_book_sanity_checks():
 def test_gap_must_persist_into_next_snapshot():
     assert reachable([0, 120, 240, 360, 600], [True, True, False, True, True], 300) == [True, False, False, True, False]
     assert reachable([0, 1000], [True, True], 300) == [False, False]          # next snapshot too late
+
+
+def test_selling_longshots_pnl_and_drawdown():
+    q, won = longshot_side([0.05, 0.92, 0.20], [0, 0, 0])        # 0.92 that lost -> its 0.08 side won
+    assert np.allclose(q, [0.05, 0.08, 0.20]) and list(won) == [0, 1, 0]
+    pnl = sell_pnl(q[:2], won[:2], 0.01, 0.05)
+    # 0.05 - 0.01 - 0.05*0.05*0.95 = 0.037625;  0.08 - 0.01 - 0.05*0.08*0.92 - 1 = -0.93368
+    assert np.allclose(pnl, [0.037625, -0.93368])
+    assert np.isclose(max_drawdown(pnl), 0.93368)
+    assert np.isclose(max_drawdown([1.0, -0.5, 2.0, -3.0, 0.5]), 3.0) and max_drawdown([0.1, 0.2]) == 0.0
+    # unbiased longshots (win rate = price) lose exactly the costs on average
+    rng = np.random.default_rng(6)
+    q = rng.uniform(0.01, 0.10, 200000)
+    won = rng.random(200000) < q
+    assert abs(sell_pnl(q, won, 0.01, 0.0).mean() + 0.01) < 0.002
 
 
 if __name__ == "__main__":

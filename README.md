@@ -1,8 +1,46 @@
 # Where are prediction markets least efficient?
 
+Polymarket prices are well calibrated. In a random sample of 11,029 resolved markets (February 2023 to
+October 2026, stratified by month), priced 7 days before their scheduled end, the miscalibration part of the
+Brier score is 0.0009 out of 0.1317. There is a small favorite-longshot bias (recalibration slope 1.07,
+p = 0.010; contracts at or below 10 cents resolve YES 0.77 cents less often than priced), and it disappears in
+markets with at least $50,000 of volume. The bias is smaller than the cost of trading it: a hypothetical rule
+that sells longshots, tuned on the older half of the sample and tested once on the newer half, makes +0.18 cents
+per contract (t = 1.3) at estimated costs and loses money at twice those costs. Read-only public data; no
+accounts, no orders.
+
+**Status:** Part 1 (calibration, longshot bias): final. Part 2 (arbitrage, order books): collecting until ~Nov 7.
+
+![calibration](calibration.png)
+
+Sample: 30,666 markets drawn at random, up to 1,000 per month of resolution, from the 1,070,804 resolved
+Polymarket markets with volume >= $1,000 (February 2023 to October 2026); 30,402 have a price history.
+Primary rule: price 7 days before the scheduled end, market still open, volume >= $1,000. Months are weighted
+roughly equally (early months have fewer than 1,000 eligible markets and are taken whole).
+
+| 7 days before scheduled end | n (events) | Brier | reliability | slope `b` (SE) | p(`b` = 1) | intercept `a` (SE) | longshots <= 10c: overpricing (SE), n |
+|---|---|---|---|---|---|---|---|
+| all | 11,029 (8,301) | 0.1317 | 0.0009 | 1.071 (0.028) | 0.010 | -0.119 (0.027) | 0.77c (0.21), 3,883 |
+| all without recurring | 10,669 (8,053) | 0.1324 | 0.0009 | 1.068 (0.028) | 0.015 | -0.117 (0.027) | 0.74c (0.21), 3,708 |
+| sports | 6,391 (5,286) | 0.1756 | 0.0011 | 0.988 (0.040) | 0.77 | -0.121 (0.031) | 0.18c (0.45), 1,142 |
+| politics | 2,020 (1,277) | 0.0603 | 0.0009 | 1.178 (0.064) | 0.006 | -0.012 (0.089) | 0.59c (0.35), 1,253 |
+| other | 1,064 (712) | 0.0774 | 0.0035 | 1.142 (0.075) | 0.059 | -0.056 (0.111) | 1.59c (0.43), 609 |
+| economics | 664 (452) | 0.0870 | 0.0025 | 1.080 (0.099) | 0.42 | -0.252 (0.134) | 1.14c (0.58), 336 |
+| crypto | 439 (275) | 0.0459 | 0.0090 | 1.169 (0.147) | 0.25 | -0.754 (0.221) | 1.60c (0.52), 322 |
+| recurring | 360 (266) | 0.1092 | 0.0044 | 1.142 (0.172) | 0.41 | -0.189 (0.204) | 1.26c (0.79), 175 |
+| weather | 91 (55) | 0.0928 | 0.0068 | 0.905 (0.288) | 0.74 | -0.063 (0.352) | -1.25c (2.88), 46 |
+| all, volume >= $50,000 | 4,682 (3,610) | 0.1221 | 0.0004 | 0.996 (0.037) | 0.92 | -0.006 (0.043) | 0.03c (0.31), 1,900 |
+
+Standard errors are clustered by event: outcomes of one event, such as the candidates in an election, are
+not independent. `a` and `b` come from `logit P(YES) = a + b * logit(price)`; a calibrated market has `a = 0`,
+`b = 1`, and `b > 1` means longshots are overpriced. Longshot overpricing is `mean(price - outcome)` over
+contracts at or below 10 cents.
+
+## About
+
 A read-only measurement study of Polymarket (Kalshi was planned and dropped: its API terms forbid this use,
-see below). If a contract trades at 70 cents, the market says
-"70% likely". This project tests whether those prices can be trusted, and where they break down.
+see "Data and venue terms"). If a contract trades at 70 cents, the market says "70% likely". This project
+tests whether those prices can be trusted, and where they break down.
 
 Scope: measurement only. Public read-only data, no accounts, no API keys, no orders. Whatever comes out is
 reported, including "these markets are efficient".
@@ -85,30 +123,14 @@ venue terms"). Without Kalshi data there is no second venue to compare. The plan
   leak its outcome into the measured price.
 - Capacity at a budget, annualized return against the T-bill yield, the next-snapshot rule and the book sanity
   checks each have a test with a hand-computed answer.
+- The longshot-selling P&L, cheaper-side selection and maximum drawdown match hand-computed values, and
+  unbiased simulated longshots lose exactly their costs.
 
 ## Results
 
 ### (a) and (b): calibration and the favorite-longshot bias (2026-10-17)
 
-![calibration](calibration.png)
-
-Sample: 30,666 markets drawn at random, up to 1,000 per month of resolution, from the 1,070,804 resolved
-Polymarket markets with volume >= $1,000 (February 2023 to October 2026); 30,402 have a price history.
-Primary rule: price 7 days before the scheduled end, market still open, volume >= $1,000. Months are weighted
-roughly equally (early months have fewer than 1,000 eligible markets and are taken whole).
-
-| 7 days before scheduled end | n (events) | Brier | reliability | slope `b` (SE) | p(`b` = 1) | intercept `a` (SE) | longshots <= 10c: overpricing (SE), n |
-|---|---|---|---|---|---|---|---|
-| all | 11,029 (8,301) | 0.1317 | 0.0009 | 1.071 (0.028) | 0.010 | -0.119 (0.027) | 0.77c (0.21), 3,883 |
-| all without recurring | 10,669 (8,053) | 0.1324 | 0.0009 | 1.068 (0.028) | 0.015 | -0.117 (0.027) | 0.74c (0.21), 3,708 |
-| sports | 6,391 (5,286) | 0.1756 | 0.0011 | 0.988 (0.040) | 0.77 | -0.121 (0.031) | 0.18c (0.45), 1,142 |
-| politics | 2,020 (1,277) | 0.0603 | 0.0009 | 1.178 (0.064) | 0.006 | -0.012 (0.089) | 0.59c (0.35), 1,253 |
-| other | 1,064 (712) | 0.0774 | 0.0035 | 1.142 (0.075) | 0.059 | -0.056 (0.111) | 1.59c (0.43), 609 |
-| economics | 664 (452) | 0.0870 | 0.0025 | 1.080 (0.099) | 0.42 | -0.252 (0.134) | 1.14c (0.58), 336 |
-| crypto | 439 (275) | 0.0459 | 0.0090 | 1.169 (0.147) | 0.25 | -0.754 (0.221) | 1.60c (0.52), 322 |
-| recurring | 360 (266) | 0.1092 | 0.0044 | 1.142 (0.172) | 0.41 | -0.189 (0.204) | 1.26c (0.79), 175 |
-| weather | 91 (55) | 0.0928 | 0.0068 | 0.905 (0.288) | 0.74 | -0.063 (0.352) | -1.25c (2.88), 46 |
-| all, volume >= $50,000 | 4,682 (3,610) | 0.1221 | 0.0004 | 0.996 (0.037) | 0.92 | -0.006 (0.043) | 0.03c (0.31), 1,900 |
+Table and chart: top of this page.
 
 - (a) Prices are well calibrated in size: reliability, the miscalibration part of the Brier score, is
   0.0009 of 0.1317. Calibration is still statistically rejected (joint test p < 0.0001), mostly through the
@@ -123,6 +145,31 @@ roughly equally (early months have fewer than 1,000 eligible markets and are tak
 - Horizons: at 1 day `b` = 1.019 (p = 0.30, n = 21,394); at 30 days `b` = 1.094 (p = 0.036, n = 3,352).
 - Many tests (8 categories x 3 horizons x 2 samples x 3 rules): a single p near 0.05 is weak evidence.
   Full tables: `results/calibration_summary.csv`, `results/calibration_bins_7d.csv`.
+
+### Is the longshot bias exploitable? A hypothetical rule (2026-10-17)
+
+Hypothetical only: no orders were placed. Rule: 7 days before the scheduled end, sell every contract quoted at
+or below X (each market's cheaper side), as a taker. Costs per contract: half-spread plus taker fee.
+
+- Spreads: historical spreads are not in the data. Today's books from the collector stand in for them: mean
+  half-spread 0.24 cents for contracts at or below 2 cents (8,310 books), 1.03 cents at 2-5 cents (4,813),
+  2.49 cents at 5-10 cents (6,955). These are active markets (events with >= $10,000 traded in a day), so
+  spreads in the historical sample were probably wider. 57% of order books near the extremes were one-sided,
+  so often there was nothing to sell into. Fees: today's taker rate for the category (0.04 to 0.07), applied
+  to every market even though most historical markets charged no fee.
+- X chosen on the older half (scheduled end up to 2025-04-24, 5,515 markets) by mean net P&L per bet: X = 3
+  cents, +0.05 cents per bet (t = 0.29, 2,003 bets). Every X from 1 to 10 cents was within about one standard
+  error of zero.
+- Tested once on the newer half (5,514 markets), X = 3 cents:
+
+| costs | bets (events) | mean price | win rate | net P&L per bet (SE) | total, 1 contract per bet | max drawdown |
+|---|---|---|---|---|---|---|
+| base | 1,015 (824) | 0.74c | 0.20% | +0.18c (0.14), t = 1.29 | +$1.82 | $0.99 |
+| 2x | 1,015 (824) | 0.74c | 0.20% | -0.18c (0.14), t = -1.31 | -$1.84 | $2.03 |
+
+The edge is not distinguishable from zero and changes sign when costs double. With real spreads probably
+wider, and one-sided books, the measured bias is not a trading opportunity. `scripts/longshot_rule.py`,
+`results/longshot_rule.csv`.
 
 Look-ahead check (`results/lookahead.csv`): share of measured prices already at >= 0.97 or <= 0.03, 7 days
 out. Pre-registered close rule: 33.0% (n = 10,561). Settle rule: 10.9% (n = 8,978). Scheduled rule: 27.4%
@@ -181,12 +228,13 @@ minute). It runs under `caffeinate -s`, which keeps the Mac awake while it is on
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python tests/test_pm.py                       # 18 known-answer tests
+.venv/bin/python tests/test_pm.py                       # 19 known-answer tests
 .venv/bin/python scripts/fetch_history.py markets       # resolved markets, volume >= $1,000 (resumable)
 .venv/bin/python scripts/fetch_history.py sample        # up to 1,000 markets per month -> sample_ids.txt
 .venv/bin/python scripts/fetch_history.py sample_prices # their 3-hour price histories (resumable)
 .venv/bin/python scripts/run_calibration.py data/polymarket/sample_ids.txt   # (a) and (b) -> results/
 .venv/bin/python scripts/plot_calibration.py            # -> calibration.png
+.venv/bin/python scripts/longshot_rule.py               # hypothetical longshot-selling rule -> results/
 ./scripts/install_collector.sh                          # (c) collector as a background agent
 .venv/bin/python scripts/scan_arb.py                    # (c) and (c') -> results/arbitrage_summary.csv
 ```
@@ -224,3 +272,10 @@ reported next to the new ones.
    annualized return to the scheduled end beats the 3-month T-bill (FRED `DTB3`, converted to a bond-equivalent
    yield); and if it is still there in the next snapshot. Profit is also reported for deploying $100, $1,000 and
    $10,000.
+5. **Exploitability of the longshot bias.** The hypothetical selling rule was added after the results, at the
+   author's request. Its threshold is chosen on the older half only and the newer half is evaluated once.
+
+## License
+
+MIT, see `LICENSE`. The license covers the code and the aggregate results. Polymarket data is not included
+and is subject to Polymarket's [Terms of Use](https://polymarket.com/tos).

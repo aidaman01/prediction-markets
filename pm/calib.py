@@ -94,3 +94,23 @@ def longshot(p, y, clusters, cut=0.10):
     meat, G = _cluster_meat((d - d.mean())[:, None], c[m])
     return {"mean": float(d.mean()), "se": float(math.sqrt(G / (G - 1) * meat[0, 0]) / len(d)), "n": int(len(d)),
             "clusters": G}
+
+
+def longshot_side(p, y):
+    """Each market's cheaper side: its price min(p, 1 - p) and whether that side won."""
+    p, y = np.asarray(p, float), np.asarray(y, float)
+    return np.minimum(p, 1 - p), np.where(p <= 0.5, y, 1 - y)
+
+
+def sell_pnl(q, won, half_spread, fee_rate):
+    """P&L per contract of selling a contract quoted at mid q as a taker: receive q minus the half-spread, pay
+    the taker fee rate * q * (1 - q), pay $1 if it wins."""
+    q = np.asarray(q, float)
+    return q - half_spread - fee_rate * q * (1 - q) - np.asarray(won, float)
+
+
+def max_drawdown(pnl):
+    """Largest fall of cumulative P&L from its running peak (the peak starts at 0)."""
+    cum = np.cumsum(pnl)
+    peak = np.maximum.accumulate(np.concatenate([[0.0], cum]))[1:]
+    return float((peak - cum).max()) if len(cum) else 0.0
