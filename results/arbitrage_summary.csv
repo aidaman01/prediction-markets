@@ -1,0 +1,4 @@
+kind,checks,positive,episodes,median_profit_usd
+c,58442,0,0,
+c'-no,270,0,0,
+c'-yes,680,5,1,0.16046

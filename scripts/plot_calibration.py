@@ -11,7 +11,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INK, MUTED, GRID, BLUE = "#0b0b0b", "#52514e", "#d9d8d4", "#2a78d6"
 
 b = pd.read_csv(os.path.join(ROOT, "results", "calibration_bins_7d.csv"))
-cats = ["all"] + [c for c in ("politics", "sports", "crypto", "economics", "weather", "other") if c in set(b.category)]
+cats = ["all"] + [c for c in ("politics", "sports", "crypto", "economics", "weather", "other") if b[b.category == c].n.sum() >= 30]
 fig, axes = plt.subplots(2, 4, figsize=(13, 6.6), sharex=True, sharey=True)
 for ax in axes.flat[len(cats):]:
     ax.axis("off")

@@ -19,8 +19,8 @@ HORIZONS = {"1d": 1, "7d": 7, "30d": 30}
 SAMPLES = {"main": 1_000, "robust": 50_000}            # minimum lifetime volume, USD
 
 
-def observations():
-    markets = {r["id"]: r for r in map(json.loads, open(os.path.join(DATA, "markets.jsonl")))}
+def observations(markets_file=os.path.join(DATA, "markets.jsonl")):
+    markets = {r["id"]: r for r in map(json.loads, open(markets_file))}
     rows, coverage = [], {"history_rows": 0, "empty_history": 0}
     for line in open(os.path.join(DATA, "history.jsonl")):
         h = json.loads(line)
@@ -72,7 +72,7 @@ def bins(df, sample="main", h="7d"):
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    df, cov = observations()
+    df, cov = observations(*sys.argv[1:])
     print("coverage:", cov)
     print(df.groupby(["horizon", "category"]).size().unstack(0).to_string())
     s = summarize(df)

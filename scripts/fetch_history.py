@@ -1,7 +1,7 @@
 """Download resolved Polymarket markets and their price histories into data/polymarket/ (local only, not committed).
 
   python scripts/fetch_history.py markets     # closed markets with volume >= $1,000 -> markets.jsonl
-  python scripts/fetch_history.py prices      # 3-hour price history of the first outcome -> history.jsonl
+  python scripts/fetch_history.py prices [markets.jsonl] [N]  # 3-hour price history of the first outcome -> history.jsonl
                                               # (resumable; random order, so a partial download is a random sample)
 """
 import json
@@ -9,6 +9,7 @@ import os
 import random
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pm.data import DAY, Client, parse_market
@@ -44,21 +45,28 @@ def wanted(r):
             and r["start"] and r["T"] - r["start"] >= DAY)
 
 
-def fetch_prices():
-    rows = list({r["id"]: r for r in map(json.loads, open(MARKETS)) if wanted(r)}.values())   # dedupe resumed pages
+def fetch_prices(markets=MARKETS, limit=None):
+    rows = list({r["id"]: r for r in map(json.loads, open(markets)) if wanted(r)}.values())   # dedupe resumed pages
     done = {json.loads(l)["id"] for l in open(HISTORY)} if os.path.exists(HISTORY) else set()
     todo = [r for r in rows if r["id"] not in done]
     random.Random(0).shuffle(todo)          # random order: whatever has been fetched so far is a random sample
+    todo = todo[:int(limit)] if limit else todo
     print(f"{len(rows)} eligible, {len(done)} done, {len(todo)} to fetch", flush=True)
-    c, t0 = Client(min_interval=0.15), time.time()
-    with open(HISTORY, "a") as f:
-        for i, r in enumerate(todo, 1):
-            try:
-                ts, px = c.price_history(r["token0"])
-            except RuntimeError as e:
-                print("skip", r["id"], e, flush=True)
-                continue
-            f.write(json.dumps({"id": r["id"], "t": ts.astype(int).tolist(), "p": px.tolist()}) + "\n")
+    workers = 8                             # each worker <= 1.25 req/s -> <= 10 req/s total; published limit 20 req/s
+    clients, t0 = [Client(min_interval=0.8) for _ in range(workers)], time.time()
+
+    def get(k_r):
+        k, r = k_r
+        try:
+            return r, clients[k % workers].price_history(r["token0"])
+        except RuntimeError as e:
+            print("skip", r["id"], e, flush=True)
+            return r, None
+
+    with open(HISTORY, "a") as f, ThreadPoolExecutor(workers) as ex:
+        for i, (r, h) in enumerate(ex.map(get, enumerate(todo)), 1):
+            if h is not None:
+                f.write(json.dumps({"id": r["id"], "t": h[0].astype(int).tolist(), "p": h[1].tolist()}) + "\n")
             if i % 1000 == 0:
                 f.flush()
                 print(f"{i}/{len(todo)}, {time.time() - t0:.0f}s", flush=True)
@@ -66,4 +74,4 @@ def fetch_prices():
 
 
 if __name__ == "__main__":
-    {"markets": fetch_markets, "prices": fetch_prices}[sys.argv[1]]()
+    {"markets": fetch_markets, "prices": fetch_prices}[sys.argv[1]](*sys.argv[2:])

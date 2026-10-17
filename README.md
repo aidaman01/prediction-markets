@@ -77,6 +77,40 @@ Is the same event priced differently on Kalshi and Polymarket, after fees?
 - Arbitrage detector on synthetic order books with hand-computed edges, including walking the book and fees.
 - The bias test rejects about 5% of the time on simulated unbiased markets with the same event clustering.
 
+## First results (preliminary, 2026-10-17)
+
+![calibration](calibration.png)
+
+Sample: price histories of a random 5,744 of the 84,152 eligible markets in the first 108,900 resolved
+markets the API returned (the full download is still running). The API lists markets in string order of
+their id, not at random, so this sample is skewed in time: 83% resolved in 2025 and only 217 in 2026. Treat
+every number here as preliminary. Full tables: `results/calibration_summary.csv`, `results/calibration_bins_7d.csv`.
+
+Primary horizon, 7 days before close, main sample (volume >= $1,000): 2,018 markets in 1,570 events.
+
+| | value |
+|---|---|
+| Brier score | 0.0889 (reliability 0.0023, resolution 0.0713, uncertainty 0.1586) |
+| Recalibration slope `b` (1 = calibrated) | 1.138, SE 0.064; test of `b = 1`: p = 0.032 |
+| Joint test `a = 0, b = 1` | p = 0.003 |
+| Longshot overpricing, contracts <= 10 cents | 0.88 cents per contract, SE 0.30 (1,075 contracts) |
+
+- (a) Prices are close to the diagonal overall: reliability, the miscalibration part of the Brier score,
+  is 0.0023 against a score of 0.0889. Calibration is still statistically rejected at the primary horizon.
+- (b) The direction is the favorite-longshot bias (`b > 1`): cheap contracts resolve YES slightly less
+  often than their price says. The effect is under one cent per contract. It is strongest in sports
+  (`b` = 1.35, SE 0.13, p = 0.007; longshots overpriced by 1.8 cents, SE 0.15).
+- In the robustness sample (volume >= $50,000, 962 markets) the bias is not significant at 7 days
+  (`b` = 1.065, SE 0.076, p = 0.39; longshot overpricing 0.32 cents, SE 0.48). The bias may be a feature
+  of thin markets.
+- Seven categories times three horizons is many tests. A single category with p near 0.05 is weak evidence.
+
+(c) and (c'), first 5 snapshots (about 10 minutes): 58,442 single-market checks, none with YES + NO below
+$1 after fees, as the mirrored books imply. Among 680 checks of exhaustive multi-outcome events, one event
+("How many Fed rate cuts in 2026?", 13 outcomes) had YES asks summing below $1 after fees in all 5
+snapshots: 1.1 cents per set at the minimum size, at most $0.16 in total over the available depth. The
+event resolves on 2027-01-01, so the edge is about 5% a year on locked capital, roughly the risk-free rate.
+
 ## Data and venue terms
 
 | | Polymarket | Kalshi |
