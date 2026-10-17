@@ -82,8 +82,8 @@ Is the same event priced differently on Kalshi and Polymarket, after fees?
 ![calibration](calibration.png)
 
 Sample: price histories of a random 5,744 of the 84,152 eligible markets in the first 108,900 resolved
-markets the API returned (the full download is still running). The API lists markets in string order of
-their id, not at random, so this sample is skewed in time: 83% resolved in 2025 and only 217 in 2026. Treat
+markets the API returned (the full download is still running). The API does not list markets in random
+order, so this sample is skewed in time: 83% resolved in 2025 and only 217 in 2026. Treat
 every number here as preliminary. Full tables: `results/calibration_summary.csv`, `results/calibration_bins_7d.csv`.
 
 Primary horizon, 7 days before close, main sample (volume >= $1,000): 2,018 markets in 1,570 events.
