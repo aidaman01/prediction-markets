@@ -100,3 +100,71 @@ def episodes(times, flags, max_gap):
         out.append((times[i], times[j], j - i + 1, times[j] - times[i], upper))
         i = j + 1
     return out
+
+
+def basket_cost(legs, q):
+    """Cash to buy q of every leg, or None if a book is too thin."""
+    cash = D(0)
+    for asks, cost in legs:
+        fills = walk(asks, q)
+        if fills is None:
+            return None
+        cash += cost(fills)[0]
+    return cash
+
+
+def at_budget(legs, payout, budget, step=D("0.01")):
+    """Deploy up to `budget` dollars: the largest q (on a 0.01 grid) whose cost fits. Returns (q, cost, profit),
+    or None if the books are too thin to spend the whole budget (capacity below budget)."""
+    budget = _d(budget)
+    depth = min(sum(s for _, s in asks) for asks, _ in legs)
+    full = basket_cost(legs, depth)
+    if full is None or full < budget:
+        return None
+    lo, hi = D(0), depth                              # cost is increasing in q: bisect
+    while hi - lo > step:
+        mid = ((lo + hi) / 2).quantize(step)
+        if mid in (lo, hi):
+            break
+        lo, hi = (mid, hi) if basket_cost(legs, mid) <= budget else (lo, mid)
+    cost = basket_cost(legs, lo)
+    return lo, cost, lo * _d(payout) - cost
+
+
+def annualized(profit, cost, days):
+    """Simple annualized return to resolution: profit / cost * 365 / days."""
+    return float(profit) / float(cost) * 365 / days
+
+
+def tbill_yield(discount_pct, days=91):
+    """FRED DTB3 is a discount-basis rate in percent; its simple (bond-equivalent) yield, as a fraction."""
+    d = discount_pct / 100
+    return 365 * d / (360 - d * days)
+
+
+def book_problems(book, snapshot_t, max_ahead=120):
+    """Sanity checks on a compact book [book_ms, bids best-first, asks best-first]. Empty list = book is usable.
+    book_ms is the time of the book's last change (an untouched book can be hours old and still current), so the
+    clock check only rejects a book stamped after the snapshot window."""
+    ms, bids, asks = book
+    out = []
+    levels = [(float(p), float(s)) for p, s in bids + asks]
+    if any(not 0 < p < 1 for p, _ in levels):
+        out.append("price outside (0, 1)")
+    if any(s <= 0 for _, s in levels):
+        out.append("non-positive size")
+    bp, ap = [float(p) for p, _ in bids], [float(p) for p, _ in asks]
+    if bp != sorted(bp, reverse=True) or ap != sorted(ap) or len(set(bp)) < len(bp) or len(set(ap)) < len(ap):
+        out.append("levels out of order or duplicated")
+    if bp and ap and bp[0] >= ap[0]:
+        out.append("crossed book")
+    if ms and ms / 1000 > snapshot_t + max_ahead:
+        out.append("timestamp after snapshot")
+    return out
+
+
+def reachable(times, flags, max_gap):
+    """A gap counts only if it is still there in the next snapshot (taken within max_gap seconds): a trader who
+    reacts one snapshot later could still have taken it."""
+    return [bool(f and i + 1 < len(times) and flags[i + 1] and times[i + 1] - times[i] <= max_gap)
+            for i, f in enumerate(flags)]

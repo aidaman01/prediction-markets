@@ -6,9 +6,10 @@ from decimal import ROUND_HALF_UP, Decimal as D
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from pm.arb import basket_profit, best_basket, episodes, kalshi_asks, kalshi_leg, pm_leg
+from pm.arb import (annualized, at_budget, basket_profit, best_basket, book_problems, episodes, kalshi_asks, kalshi_leg,
+                    pm_leg, reachable, tbill_yield)
 from pm.calib import brier, calibration_table, longshot, murphy, recalibration, wilson
-from pm.data import parse_market, price_at
+from pm.data import DAY, measure_time, parse_market, price_at, recurring_templates, resolution_time, template
 from pm.fees import kalshi_buy_cash, kalshi_fill_rounding, kalshi_trade_fee, polymarket_fee
 
 PRICES = ["0.01"] + [f"{x / 100:.2f}" for x in range(5, 100, 5)] + ["0.99"]
@@ -154,6 +155,93 @@ def test_parse_market_and_price_at():
     ts, px = np.array([0, 10800, 21600]), np.array([0.2, 0.3, 0.4])
     assert price_at(ts, px, 15000) == 0.3 and price_at(ts, px, -1) is None
     assert price_at(ts, px, 21600 + 86400) == 0.4 and price_at(ts, px, 21601 + 86400) is None
+
+
+def test_early_resolution_does_not_leak_the_outcome():
+    """Scheduled end day 100; the event happens on day 60 and the price jumps to 0.99; the market closes on day 63
+    (resolution lag). Anchoring on the close, 1 day before it sees 0.99: the outcome leaks. The fixed time
+    before the scheduled end finds the market already closed and measures nothing."""
+    ts = np.arange(0, 63 * DAY + 1, 10800.0)
+    px = np.where(ts < 60 * DAY, 0.40, 0.99)
+    end, closed = 100 * DAY, 63 * DAY
+    assert price_at(ts, px, min(end, closed) - DAY) == 0.99                 # the leak
+    assert measure_time(end, closed, DAY) is None and measure_time(end, closed, 40 * DAY) == 60 * DAY
+    R = resolution_time(ts, px, closed)
+    assert R == 60 * DAY and price_at(ts, px, R - DAY) == 0.40
+    assert resolution_time(ts, np.full(len(ts), 0.5), closed) == ts[-1]
+    assert resolution_time(ts, np.where(ts < 30 * DAY, 0.6, 0.01), closed) == 30 * DAY
+
+
+def simulate_by_date(n, rng, E=60 * DAY, lag=2 * DAY):
+    """Efficient 'will it happen by day 60' markets: hazard lam, price = P(event before E | none yet), calibrated at
+    every fixed time. The event sends the price to 0.999 and the market closes `lag` later; with no event it
+    decays to 0.001 and closes at E."""
+    grid = np.arange(0, E + lag + 1, 10800.0)
+    for _ in range(n):
+        p0 = rng.uniform(0.05, 0.95)
+        lam = -np.log(1 - p0) / E
+        tau = rng.exponential(1 / lam)
+        y = tau < E
+        closed = tau + lag if y else E
+        ts = grid[grid <= closed]
+        px = np.clip(np.where(ts < min(tau, E), 1 - np.exp(-lam * np.clip(E - ts, 0, None)), float(y)), 0.001, 0.999)
+        yield ts, px, E, closed, float(y)
+
+
+def test_only_scheduled_anchor_keeps_an_efficient_market_calibrated():
+    """Measuring 7 days before the actual close, or before prices settle, picks the moment with hindsight and
+    makes an efficient market look miscalibrated; 7 days before the scheduled end (if still open) does not."""
+    rng, h = np.random.default_rng(5), 7 * DAY
+    obs = {"close": ([], []), "resolution": ([], []), "scheduled": ([], [])}
+    for ts, px, end, closed, y in simulate_by_date(6000, rng):
+        T = min(end, closed)
+        for k, t in (("close", T - h), ("resolution", resolution_time(ts, px, T) - h), ("scheduled", measure_time(end, closed, h))):
+            p = price_at(ts, px, t) if t is not None and t >= 0 else None
+            if p is not None:
+                obs[k][0].append(p)
+                obs[k][1].append(y)
+    fit = {k: recalibration(np.array(p), np.array(y), np.arange(len(p))) for k, (p, y) in obs.items()}
+    assert fit["scheduled"]["p_joint"] > 0.01 and abs(fit["scheduled"]["b"] - 1) < 3 * fit["scheduled"]["se_b"]
+    assert fit["close"]["p_joint"] < 1e-6 and fit["resolution"]["p_joint"] < 1e-6
+
+
+def test_recurring_templates():
+    qs = [f"Bitcoin Up or Down - October {d}, {h}:15AM-{h}:30AM ET" for d in range(1, 31) for h in range(1, 5)]
+    qs += ["Will Everton FC win on 2026-10-17?", "Will Everton FC win on 2026-10-24?"]
+    assert template(qs[0]) == "bitcoin up or down"
+    assert recurring_templates(qs) == {"bitcoin up or down"}         # 120 markets; Everton only 2
+
+
+def test_capacity_at_budget():
+    legs = [pm_leg([("0.40", 100), ("0.45", 100)]), pm_leg([("0.50", 50), ("0.58", 200)])]
+    # cost: 0.90/unit to 50, 0.98 to 100 (total 94), then 1.03/unit
+    assert at_budget(legs, 1, 10) == (D("11.11"), D("9.9990"), D("1.1110"))
+    assert at_budget(legs, 1, 100) == (D("105.82"), D("99.9946"), D("5.8254"))
+    assert at_budget(legs, 1, 1000) is None                         # full depth costs only 197
+
+
+def test_annualized_gap_vs_tbill():
+    r = annualized(D("0.011"), D("0.989"), 75)                     # 1.1 cents on 98.9 for 75 days
+    assert np.isclose(r, 0.011 / 0.989 * 365 / 75)
+    assert np.isclose(tbill_yield(5.0), 365 * 0.05 / (360 - 0.05 * 91))   # 5.134%
+    assert r > tbill_yield(4.0) and r < tbill_yield(6.0)
+
+
+def test_book_sanity_checks():
+    t = 1_000_000
+    good = [t * 1000, [["0.40", "10"], ["0.39", "5"]], [["0.42", "7"], ["0.45", "1"]]]
+    assert book_problems(good, t) == []
+    assert book_problems([t * 1000, [["0.43", "1"]], [["0.42", "1"]]], t) == ["crossed book"]
+    assert book_problems([t * 1000, [], [["1.00", "1"]]], t) == ["price outside (0, 1)"]
+    assert book_problems([t * 1000, [["0.40", "0"]], []], t) == ["non-positive size"]
+    assert book_problems([t * 1000, [["0.39", "1"], ["0.40", "1"]], []], t) == ["levels out of order or duplicated"]
+    assert book_problems([(t - 36000) * 1000, *good[1:]], t) == []                # untouched for 10 h: still current
+    assert book_problems([(t + 3600) * 1000, *good[1:]], t) == ["timestamp after snapshot"]
+
+
+def test_gap_must_persist_into_next_snapshot():
+    assert reachable([0, 120, 240, 360, 600], [True, True, False, True, True], 300) == [True, False, False, True, False]
+    assert reachable([0, 1000], [True, True], 300) == [False, False]          # next snapshot too late
 
 
 if __name__ == "__main__":

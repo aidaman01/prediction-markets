@@ -10,7 +10,7 @@ reported, including "these markets are efficient".
 ## Research questions (written before looking at any results)
 
 This section was committed before any data was downloaded or analysed. Later changes to it are visible in
-the git history and are listed under "Deviations" below.
+the git history and are listed under "Changes to plan" below.
 
 ### (a) Calibration
 
@@ -81,40 +81,26 @@ venue terms"). Without Kalshi data there is no second venue to compare. The plan
   miscalibrated (must be detected).
 - Arbitrage detector on synthetic order books with hand-computed edges, including walking the book and fees.
 - The bias test rejects about 5% of the time on simulated unbiased markets with the same event clustering.
+- The measuring-time rule keeps a simulated efficient market calibrated; a market that resolves early cannot
+  leak its outcome into the measured price.
+- Capacity at a budget, annualized return against the T-bill yield, the next-snapshot rule and the book sanity
+  checks each have a test with a hand-computed answer.
 
-## First results (preliminary, 2026-10-17)
+## Results
 
-![calibration](calibration.png)
+Final numbers for (a) and (b) come from a random sample stratified by month over the whole history (see
+"Changes to plan"); they will replace this section when that run is done.
 
-Sample: price histories of a random 5,744 of the 84,152 eligible markets in the first 108,900 resolved
-markets the API returned (the full download is still running). The API does not list markets in random
-order, so this sample is skewed in time: 83% resolved in 2025 and only 217 in 2026. Treat
-every number here as preliminary. Full tables: `results/calibration_summary.csv`, `results/calibration_bins_7d.csv`.
+### Superseded: first preliminary results (2026-10-17)
 
-Primary horizon, 7 days before close, main sample (volume >= $1,000): 2,018 markets in 1,570 events.
+Kept for the record; do not use. Two flaws: the sample was the first markets the API listed (83% resolved in
+2025, 217 in 2026), and prices were measured 7 days before the actual close, a rule that looks into the future
+(see "Changes to plan"). On that basis: 2,018 markets, Brier 0.0889, slope `b` = 1.138 (SE 0.064, p = 0.032),
+longshot overpricing 0.88 cents (SE 0.30).
 
-| | value |
-|---|---|
-| Brier score | 0.0889 (reliability 0.0023, resolution 0.0713, uncertainty 0.1586) |
-| Recalibration slope `b` (1 = calibrated) | 1.138, SE 0.064; test of `b = 1`: p = 0.032 |
-| Joint test `a = 0, b = 1` | p = 0.003 |
-| Longshot overpricing, contracts <= 10 cents | 0.88 cents per contract, SE 0.30 (1,075 contracts) |
-
-- (a) Prices are close to the diagonal overall: reliability, the miscalibration part of the Brier score,
-  is 0.0023 against a score of 0.0889. Calibration is still statistically rejected at the primary horizon.
-- (b) The direction is the favorite-longshot bias (`b > 1`): cheap contracts resolve YES slightly less
-  often than their price says. The effect is under one cent per contract. It is strongest in sports
-  (`b` = 1.35, SE 0.13, p = 0.007; longshots overpriced by 1.8 cents, SE 0.15).
-- In the robustness sample (volume >= $50,000, 962 markets) the bias is not significant at 7 days
-  (`b` = 1.065, SE 0.076, p = 0.39; longshot overpricing 0.32 cents, SE 0.48). The bias may be a feature
-  of thin markets.
-- Seven categories times three horizons is many tests. A single category with p near 0.05 is weak evidence.
-
-(c) and (c'), first 5 snapshots (about 10 minutes): 58,442 single-market checks, none with YES + NO below
-$1 after fees, as the mirrored books imply. Among 680 checks of exhaustive multi-outcome events, one event
-("How many Fed rate cuts in 2026?", 13 outcomes) had YES asks summing below $1 after fees in all 5
-snapshots: 1.1 cents per set at the minimum size, at most $0.16 in total over the available depth. The
-event resolves on 2027-01-01, so the edge is about 5% a year on locked capital, roughly the risk-free rate.
+An error in the first (c') note is corrected here: for "How many Fed rate cuts in 2026?" the $0.0111 edge was
+the profit on the minimum order of 5 sets, not on one set: about 0.2 cents per set, 1.1% a year to the
+scheduled end, below the 3-month T-bill. It is not an arbitrage under the rules below.
 
 ## Data and venue terms
 
@@ -141,22 +127,53 @@ would allow a snapshot every few seconds. Disk is the binding constraint (about 
 snapshot, about 0.9 GB a day). Only the first outcome's book is stored: Polymarket derives the second
 outcome's book from it. In a check of 347 markets with both books fetched in the same request, 346 were
 exact mirrors (bid `p` = ask `1 - p`, same size). `scripts/install_collector.sh` installs it as a launchd
-agent that starts at login and restarts if it dies. It only runs while the Mac is awake.
+agent that starts at login and restarts if it dies (checked by killing it: launchd restarted it within a
+minute). It runs under `caffeinate -s`, which keeps the Mac awake while it is on AC power.
 
 ## How to run
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python tests/test_pm.py                       # 11 known-answer tests
-.venv/bin/python scripts/fetch_history.py markets       # resolved markets, volume >= $1,000
-.venv/bin/python scripts/fetch_history.py prices        # 3-hour price histories (resumable)
-.venv/bin/python scripts/run_calibration.py             # (a) and (b) -> results/
+.venv/bin/python tests/test_pm.py                       # 18 known-answer tests
+.venv/bin/python scripts/fetch_history.py markets       # resolved markets, volume >= $1,000 (resumable)
+.venv/bin/python scripts/fetch_history.py sample        # up to 1,000 markets per month -> sample_ids.txt
+.venv/bin/python scripts/fetch_history.py sample_prices # their 3-hour price histories (resumable)
+.venv/bin/python scripts/run_calibration.py data/polymarket/sample_ids.txt   # (a) and (b) -> results/
 .venv/bin/python scripts/plot_calibration.py            # -> calibration.png
 ./scripts/install_collector.sh                          # (c) collector as a background agent
+.venv/bin/python scripts/scan_arb.py                    # (c) and (c') -> results/arbitrage_summary.csv
 ```
 
-## Deviations
+## Changes to plan
 
-Implementation details fixed after the questions were committed but before any result was computed:
-prices of exactly 0 or 1 are clipped to [0.001, 0.999] (the smallest Polymarket tick) before taking logits;
-a category is reported only if it has at least 30 events; Kalshi is dropped and question (d) closed for the terms reason above.
+### Changes to plan (before results), 2026-10-17
+
+- Kalshi dropped: its Developer Agreement forbids storing data for non-trading use. Question (d) is dropped
+  with it. The study covers Polymarket only.
+- Implementation details: prices of exactly 0 or 1 are clipped to [0.001, 0.999] (the smallest Polymarket
+  tick) before taking logits; a category is reported only if it has at least 30 events.
+
+### Changes after the superseded preliminary results, 2026-10-17
+
+Made after seeing the preliminary numbers, each for the stated reason. The old rules are still computed and
+reported next to the new ones.
+
+1. **Measuring time.** The pre-registered rule measured the price `h` before `T = min(scheduled end, actual
+   close)`. Many markets close early, after their outcome is known, so this rule chooses the measuring time
+   with hindsight. Measuring `h` before the moment prices settle (the start of the final run at >= 0.97 or
+   <= 0.03) has the same problem. On simulated efficient "will it happen by day 60" markets, calibrated by
+   construction, the slope is `b` = 2.34 for the close rule and 2.51 for the settle rule, but 0.945 (SE 0.048)
+   for the rule now used: **`h` before the scheduled end, and only if the market is still open then.** Whether a
+   market is open at a fixed time is known at that time, so nothing is chosen with hindsight
+   (`test_only_scheduled_anchor_keeps_an_efficient_market_calibrated`). `results/lookahead.csv` reports, for
+   each rule, the share of measured prices already at >= 0.97 or <= 0.03.
+2. **Recurring markets.** Machine-generated recurring series (crypto "Up or Down", price and temperature
+   ladders, tweet counts, ...) form their own category, "recurring": a question whose template, with dates,
+   times and numbers removed, is shared by at least 100 markets. Results are reported with and without them.
+3. **Sample.** Up to 1,000 markets drawn at random from each calendar month of resolution, over the whole
+   history (`scripts/fetch_history.py sample`). Pooled numbers therefore weight months roughly equally.
+4. **Arbitrage rules for (c) and (c').** A gap counts only if every book passes sanity checks (prices in
+   (0, 1), positive sizes, ordered levels, not crossed, no timestamp after the snapshot); if its simple
+   annualized return to the scheduled end beats the 3-month T-bill (FRED `DTB3`, converted to a bond-equivalent
+   yield); and if it is still there in the next snapshot. Profit is also reported for deploying $100, $1,000 and
+   $10,000.

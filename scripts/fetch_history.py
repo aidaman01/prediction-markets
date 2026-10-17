@@ -1,6 +1,7 @@
 """Download resolved Polymarket markets and their price histories into data/polymarket/ (local only, not committed).
 
   python scripts/fetch_history.py markets     # closed markets with volume >= $1,000 -> markets.jsonl
+  python scripts/fetch_history.py sample [K]   # stratified sample: up to K (default 1000) markets per month -> sample_ids.txt
   python scripts/fetch_history.py prices [markets.jsonl] [N]  # 3-hour price history of the first outcome -> history.jsonl
                                               # (resumable; random order, so a partial download is a random sample)
 """
@@ -16,6 +17,7 @@ from pm.data import DAY, Client, parse_market
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "polymarket")
 MARKETS, HISTORY = os.path.join(OUT, "markets.jsonl"), os.path.join(OUT, "history.jsonl")
+SAMPLE = os.path.join(OUT, "sample_ids.txt")
 
 
 def fetch_markets():
@@ -45,8 +47,26 @@ def wanted(r):
             and r["start"] and r["T"] - r["start"] >= DAY)
 
 
-def fetch_prices(markets=MARKETS, limit=None):
+def stratified_sample(k=1000, seed=0):
+    """Up to k eligible markets drawn at random from every calendar month (UTC) of resolution T."""
+    by_month = {}
+    for r in {r["id"]: r for r in map(json.loads, open(MARKETS)) if wanted(r)}.values():
+        by_month.setdefault(time.strftime("%Y-%m", time.gmtime(r["T"])), []).append(r["id"])
+    rng, ids = random.Random(seed), []
+    for month in sorted(by_month):
+        pool = sorted(by_month[month])
+        pick = rng.sample(pool, min(int(k), len(pool)))
+        ids += pick
+        print(month, len(pool), len(pick), flush=True)
+    open(SAMPLE, "w").write("\n".join(ids) + "\n")
+    print(f"{len(ids)} markets in {len(by_month)} months -> {SAMPLE}", flush=True)
+
+
+def fetch_prices(markets=MARKETS, limit=None, ids=None):
     rows = list({r["id"]: r for r in map(json.loads, open(markets)) if wanted(r)}.values())   # dedupe resumed pages
+    if ids:
+        keep = {l.strip() for l in open(ids)}
+        rows = [r for r in rows if r["id"] in keep]
     done = {json.loads(l)["id"] for l in open(HISTORY)} if os.path.exists(HISTORY) else set()
     todo = [r for r in rows if r["id"] not in done]
     random.Random(0).shuffle(todo)          # random order: whatever has been fetched so far is a random sample
@@ -74,4 +94,5 @@ def fetch_prices(markets=MARKETS, limit=None):
 
 
 if __name__ == "__main__":
-    {"markets": fetch_markets, "prices": fetch_prices}[sys.argv[1]](*sys.argv[2:])
+    {"markets": fetch_markets, "prices": fetch_prices, "sample": stratified_sample,
+     "sample_prices": lambda: fetch_prices(MARKETS, None, SAMPLE)}[sys.argv[1]](*sys.argv[2:])

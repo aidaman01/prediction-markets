@@ -4,7 +4,9 @@ Endpoints and limits from docs.polymarket.com (api-reference/rate-limits): Gamma
 data-api /v2/prices-history 200 req/10s, CLOB /books 500 req/10s. We stay far below them.
 """
 import json
+import re
 import time
+from collections import Counter
 from datetime import datetime, timezone
 
 import numpy as np
@@ -67,6 +69,45 @@ def parse_market(m):
         "volume": float(m.get("volumeNum") or 0), "neg_risk": bool(m.get("negRisk")),
         "order_book": bool(m.get("enableOrderBook")), "category": category(labels),
     }
+
+
+_MONTHS = ("january|february|march|april|may|june|july|august|september|october|november|december|"
+           "jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|monday|tuesday|wednesday|thursday|friday|saturday|sunday")
+
+
+def template(question):
+    """Question with dates, times and numbers removed: 'Bitcoin Up or Down - Oct 17, 8:15AM ET' -> 'bitcoin up or down'."""
+    q = re.sub(rf"\b({_MONTHS})\b", "#", question.lower())
+    q = re.sub(r"\d+([.,:]\d+)*(st|nd|rd|th|am|pm|k|m|%)?", "#", q)
+    q = re.sub(r"\b(am|pm|et|utc)\b", "", q)
+    return re.sub(r"[#\s\-\u2013/,$]+", " ", q).strip()
+
+
+def recurring_templates(questions, min_count=100):
+    """Templates shared by at least min_count markets: machine-generated recurring series (crypto up/down,
+    price and temperature ladders, ...). Uses question text only, never outcomes or prices."""
+    return {t for t, n in Counter(map(template, questions)).items() if n >= min_count}
+
+
+def measure_time(end, closed, h):
+    """Non-anticipating measuring time: h before the scheduled end, if the market was still open then; else None.
+    Whether a market is open at a fixed time is known at that time, so prices measured this way stay calibrated
+    for an efficient market. Anchoring on the actual close or on the moment prices settle looks into the future."""
+    t = end - h
+    return t if closed > t else None
+
+
+def resolution_time(ts, px, close, hi=0.97, lo=0.03):
+    """When prices show the outcome was known: the start of the final run of prices at or beyond hi (or at or
+    below lo, on the same side as the last price) that lasts to the end of the history; capped by the close
+    time and the last recorded price. If the last price is not extreme, the close (or last price) time."""
+    end = min(close, ts[-1]) if len(ts) else close
+    if not len(px) or lo < px[-1] < hi:
+        return end
+    up, k = px[-1] >= hi, len(px)
+    while k > 0 and ((px[k - 1] >= hi) if up else (px[k - 1] <= lo)):
+        k -= 1
+    return min(end, ts[k])
 
 
 def price_at(ts, px, t, max_stale=DAY):
