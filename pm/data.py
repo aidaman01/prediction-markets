@@ -1,0 +1,121 @@
+"""Polymarket public API (read-only, no key) and parsing of its records.
+
+Endpoints and limits from docs.polymarket.com (api-reference/rate-limits): Gamma /markets 300 req/10s,
+data-api /v2/prices-history 200 req/10s, CLOB /books 500 req/10s. We stay far below them.
+"""
+import json
+import time
+from datetime import datetime, timezone
+
+import numpy as np
+import requests
+
+GAMMA = "https://gamma-api.polymarket.com"
+DATA = "https://data-api.polymarket.com"
+CLOB = "https://clob.polymarket.com"
+DAY = 86400
+
+# Fixed category mapping, checked in order; first match wins. Inputs: tag slugs of the market and its events,
+# the old free-text `category` field and the fee type prefix (e.g. "sports_fees_v2" -> "sports").
+CATEGORIES = [
+    ("sports", {"sports", "nba", "nfl", "mlb", "nhl", "soccer", "tennis", "golf", "ufc", "mma", "boxing", "f1",
+                "cricket", "esports", "ncaa", "basketball", "football", "baseball", "hockey", "olympics"}),
+    ("crypto", {"crypto", "bitcoin", "ethereum", "solana", "xrp", "crypto-prices"}),
+    ("weather", {"weather", "climate", "temperature", "hurricanes", "climate-weather"}),
+    ("economics", {"economy", "economics", "fed", "fed-rates", "inflation", "cpi", "jobs", "gdp", "finance",
+                   "business", "stocks", "economic-policy", "interest-rates", "earnings"}),
+    ("politics", {"politics", "elections", "us-presidential-election", "geopolitics", "world-elections",
+                  "us-politics", "global-elections", "congress", "trump", "us-current-affairs"}),
+]
+
+
+def category(labels):
+    labels = {str(s).lower().replace(" ", "-") for s in labels if s}
+    for name, keys in CATEGORIES:
+        if labels & keys:
+            return name
+    return "other"
+
+
+def _ts(s):
+    if not s:
+        return None
+    s = s.replace(" ", "T").replace("Z", "+00:00")
+    if s.endswith("+00"):
+        s += ":00"
+    return datetime.fromisoformat(s).astimezone(timezone.utc).timestamp()
+
+
+def _json(x):
+    return json.loads(x) if isinstance(x, str) else (x or [])
+
+
+def parse_market(m):
+    """Flat record for a Gamma market. y = 1 if the first outcome won, 0 if it lost, None otherwise."""
+    prices, tokens = _json(m.get("outcomePrices")), _json(m.get("clobTokenIds"))
+    y = {("1", "0"): 1, ("0", "1"): 0}.get(tuple(prices)) if len(prices) == 2 else None
+    events = m.get("events") or [{}]
+    labels = [t.get("slug") for t in (m.get("tags") or [])]
+    labels += [t.get("slug") for e in events for t in (e.get("tags") or [])]
+    labels += [m.get("category"), (m.get("feeType") or "").split("_fees")[0]]
+    end, closed = _ts(m.get("endDate")), _ts(m.get("closedTime"))
+    return {
+        "id": str(m.get("id")), "question": m.get("question"), "event_id": str(events[0].get("id") or m.get("id")),
+        "token0": tokens[0] if tokens else None, "y": y, "n_outcomes": len(prices),
+        "start": _ts(m.get("startDate") or m.get("createdAt")), "end": end, "closed": closed,
+        "T": min(t for t in (end, closed) if t is not None) if (end or closed) else None,
+        "volume": float(m.get("volumeNum") or 0), "neg_risk": bool(m.get("negRisk")),
+        "order_book": bool(m.get("enableOrderBook")), "category": category(labels),
+    }
+
+
+def price_at(ts, px, t, max_stale=DAY):
+    """Last price at or before t, if recorded within max_stale seconds; else None. ts ascending."""
+    i = int(np.searchsorted(ts, t, side="right")) - 1
+    if i < 0 or t - ts[i] > max_stale:
+        return None
+    return float(px[i])
+
+
+class Client:
+    """requests session with a minimum spacing between calls and bounded exponential backoff on errors."""
+
+    def __init__(self, min_interval=0.2, retries=6, timeout=30):
+        self.s, self.min_interval, self.retries, self.timeout, self.last = requests.Session(), min_interval, retries, timeout, 0.0
+
+    def call(self, method, url, **kw):
+        for k in range(self.retries):
+            wait = self.min_interval - (time.monotonic() - self.last)
+            if wait > 0:
+                time.sleep(wait)
+            self.last = time.monotonic()
+            try:
+                r = self.s.request(method, url, timeout=self.timeout, **kw)
+                if r.status_code == 200:
+                    return r.json()
+                if r.status_code < 500 and r.status_code != 429:
+                    r.raise_for_status()
+            except (requests.ConnectionError, requests.Timeout):
+                pass
+            time.sleep(min(60, 2 ** k))
+        raise RuntimeError(f"{method} {url} failed after {self.retries} tries")
+
+    def markets(self, **params):
+        """Iterate Gamma markets (keyset pagination)."""
+        params = {"limit": 100, **params}
+        while True:
+            d = self.call("GET", f"{GAMMA}/markets/keyset", params=params)
+            yield from d.get("markets") or []
+            if not d.get("next_cursor"):
+                return
+            params["after_cursor"] = d["next_cursor"]
+
+    def price_history(self, token_id, bucket=10800):
+        """Full price history at 3-hour buckets (permanent per docs). Returns (timestamps, prices) arrays."""
+        d = self.call("GET", f"{DATA}/v2/prices-history",
+                      params={"token_id": token_id, "interval": "max", "bucket_seconds": bucket})
+        pts = d.get("data") or []
+        return np.array([x["timestamp"] for x in pts], float), np.array([x["price"] for x in pts], float)
+
+    def books(self, token_ids):
+        return self.call("POST", f"{CLOB}/books", json=[{"token_id": t} for t in token_ids])
